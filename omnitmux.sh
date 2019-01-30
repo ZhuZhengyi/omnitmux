@@ -1,9 +1,8 @@
 #!/bin/sh
 
-show_menu=1
+show_menu=0
 do_multicast=0
-tagged_pane=""
-window_count=1
+menu_width=32
 curr_id=1
 declare -a hosts
 declare -a hostids
@@ -77,8 +76,7 @@ close_window() {
     if [ "$n" != "n" ] && [ "$n" != "y" ]; then
         return
     elif [ "$n" = "y" ]; then
-        tput rc; tput cnorm
-        echo -n "close windows ... "
+        echo  "close windows ... "
         while [ 1 ] ; do
             window_count=`tmux list-window | wc -l | awk '{print $1}'`
             if [ $window_count -le 1 ] ; then
@@ -87,13 +85,14 @@ close_window() {
             tmux kill-window -t "{end}"
         done
         tmux kill-pane -t "{right}"
+        tput rc; tput cnorm
         exit 0
     fi
 }
 
 join_pane () {
     tmux join-pane -s $1 -h -d
-    tmux resize-pane -t "{left}" -x "40"
+    tmux resize-pane -t "{left}" -x "$menu_width"
 }
 
 create_window () {
@@ -107,11 +106,11 @@ create_window () {
 }
 
 prev_window () {
-    window_count=`tmux list-windows | wc -l | awk '{print $1}'`
-    ((prev_id=curr_id-1+window_count))
-    ((prev_id%=window_count))
+    host_count=${#hosts[*]}
+    ((prev_id=curr_id-1+host_count))
+    ((prev_id%=host_count))
     if [ $prev_id -lt 1 ] ; then
-        prev_id=$window_count
+        prev_id=$host_count
     fi
     curr_id=$prev_id
     curr_paneid=${pane_ids[$curr_id]}
@@ -120,11 +119,11 @@ prev_window () {
 
 
 next_window () {
-    window_count=`tmux list-windows | wc -l | awk '{print $1}'`
+    host_count=${#hosts[*]}
     ((next_id=curr_id+1))
-    ((next_id%=window_count))
+    ((next_id%=host_count))
     if [ $next_id -lt 1 ] ; then
-        next_id=$window_count
+        next_id=$host_count
     fi
     curr_id=$next_id
     curr_paneid=${pane_ids[$curr_id]}
