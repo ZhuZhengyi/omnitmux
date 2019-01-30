@@ -18,6 +18,7 @@ func_menu () {
     clear
     if [ $show_menu = 1 ]; then
         echo "========[ omni-tmux v0.1 ]========"
+        echo "[1;32m[F1][m: split right pane"
         echo "[1;32m[F2][m: go next window"
         echo "[1;32m[F3][m: go previous window"
         echo "[1;32m[F4][m: remove current window"
@@ -173,6 +174,11 @@ multicast () {
     fi
 }
 
+split_pane () {
+    host=${hosts[$curr_id]}
+    tmux split-window -v -t "{right}" "ssh $host"
+}
+
 tag_untag_all_windows () {
     tagged_ids_count=${#tagged_ids[*]}
     if [ $tagged_ids_count -eq 0 ] ; then
@@ -235,6 +241,9 @@ func_menu
 while [ 1 ]; do
     m=`get_keystroke`
     case "$m" in
+        OP|\[11~) #F2
+            split_pane
+            ;;
         OQ|\[12~) #F2
             next_window
             ;;
@@ -262,6 +271,9 @@ while [ 1 ]; do
         \[21~) #F10
             close_window
             exit 0
+            ;;
+        \[22~) #F11
+            split_pane
             ;;
         *)
             multicast "$m"
