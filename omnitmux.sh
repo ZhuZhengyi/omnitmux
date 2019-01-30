@@ -9,6 +9,15 @@ declare -a hostids
 declare -a pane_ids
 declare -a tagged_ids
 
+RED='\033[1;31m'
+GREEN='\033[1;32m'
+BLINK='\033[1;38m'
+NC='\033[0m' # No Color
+
+print_text () {
+    echo "$1$NC"
+}
+
 toggle_menu () {
     show_menu=$(($(($show_menu+1))%2))
 }
@@ -16,48 +25,44 @@ toggle_menu () {
 func_menu () {
     clear
     if [ $show_menu = 1 ]; then
-        echo "========[ omni-tmux v0.1 ]========"
-        echo "[1;32m[F1][m: split right pane"
-        echo "[1;32m[F2][m: go next window"
-        echo "[1;32m[F3][m: go previous window"
-        echo "[1;32m[F4][m: remove current window"
-        echo "[1;32m[F5][m: tag/untag current window"
-        echo "[1;32m[F6][m: tag/untag all windows"
-        echo "[1;32m[F7][m: toggle multicast"
-        echo "[1;32m[F8][m: add host"
-        echo "[1;32m[F9][m: show/hide menu"
-        echo "[1;32m[F10][m: quit program"
+        echo "======[ omni-tmux v0.1 ]======"
+        echo "$GREEN[F1]$NC: split right pane"
+        echo "$GREEN[F2]$NC: go next window"
+        echo "$GREEN[F3]$NC: go previous window"
+        echo "$GREEN[F4]$NC: remove current window"
+        echo "$GREEN[F5]$NC: tag/untag current window"
+        echo "$GREEN[F6]$NC: tag/untag all windows"
+        echo "$GREEN[F7]$NC: toggle multicast"
+        echo "$GREEN[F8]$NC: add host"
+        echo "$GREEN[F9]$NC: show/hide menu"
+        echo "$GREEN[F10]$NC: quit program"
         echo "================================"
     else
-        echo "[1;32m[F9][m: show/hide menu"
+        echo "$GREEN[F9]$NC: show/hide menu"
         echo "================================"
     fi
 
     host_id=0
     for host in ${hosts[@]}; do
         ((host_id+=1))
-        found=0
+        line_text="[$host_id] $host"
         for id in ${tagged_ids[*]} ; do
             if [ "$id" == "$host_id" ] ; then
-                found=1
+                line_text="$line_text *"
+                break
             fi
         done
 
         if [ $host_id -eq $curr_id ] ; then
-            if [ "$found" == "1" ] ; then
-                echo "[1;32m[$host_id] $host * [m"
-            else
-                echo "[1;32m[$host_id] $host [m"
-            fi
-        elif [ "$found" == "1" ] ; then
-            echo "[1;31m[$host_id] $host *[m"
-        else
-            echo "[$host_id] $host"
+            line_text="$GREEN$line_text"
+        elif [ $do_multicast = 1 ]; then
+            line_text="$RED$line_text"
         fi
+        print_text "$line_text"
     done
 
     if [ $do_multicast = 1 ]; then
-        echo  "\n[1;38m!!! MULTICAST MODE !!![m"
+        echo  "\n$BLINK!!! MULTICAST MODE !!!$NC"
     fi
     tput sc;tput civis
 }
