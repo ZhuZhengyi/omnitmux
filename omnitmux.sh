@@ -9,10 +9,10 @@ declare -a hostids
 declare -a pane_ids
 declare -a tagged_ids
 
-RED='\033[1;31m'
-GREEN='\033[1;32m'
-BLINK='\033[1;38m'
-NC='\033[0m' # No Color
+RED="\033[1;31m"
+GREEN="\033[1;32m"
+BLINK="\033[1;38m"
+NC="\033[0m" # No Color
 
 print_text () {
     echo "$1$NC"
@@ -29,11 +29,11 @@ func_menu () {
         echo "$GREEN[F1]$NC: split right pane"
         echo "$GREEN[F2]$NC: go next window"
         echo "$GREEN[F3]$NC: go previous window"
-        echo "$GREEN[F4]$NC: remove current window"
-        echo "$GREEN[F5]$NC: tag/untag current window"
-        echo "$GREEN[F6]$NC: tag/untag all windows"
-        echo "$GREEN[F7]$NC: toggle multicast"
-        echo "$GREEN[F8]$NC: add host"
+        echo "$GREEN[F4]$NC: tag/untag current window"
+        echo "$GREEN[F5]$NC: tag/untag all windows"
+        echo "$GREEN[F6]$NC: toggle multicast"
+        echo "$GREEN[F7]$NC: add host"
+        echo "$GREEN[F8]$NC: remove current window"
         echo "$GREEN[F9]$NC: show/hide menu"
         echo "$GREEN[F10]$NC: quit program"
         echo "================================"
@@ -62,7 +62,7 @@ func_menu () {
     done
 
     if [ $do_multicast = 1 ]; then
-        echo  "\n$BLINK!!! MULTICAST MODE !!!$NC"
+        print_text  "\n$BLINK!!! MULTICAST MODE !!!"
     fi
     tput sc;tput civis
 }
@@ -82,14 +82,9 @@ close_window() {
         return
     elif [ "$n" = "y" ]; then
         echo  "close windows ... "
-        while [ 1 ] ; do
-            window_count=`tmux list-window | wc -l | awk '{print $1}'`
-            if [ $window_count -le 1 ] ; then
-                break
-            fi
-            tmux kill-window -t "{end}"
+        for pid in ${pane_ids[*]} ; do
+            tmux kill-pane -t "${pid}"
         done
-        tmux kill-pane -t "{right}"
         tput rc; tput cnorm
         exit 0
     fi
@@ -104,10 +99,12 @@ create_window () {
     host="$1"
     id=${#hosts[*]}
     paneid=`tmux new-window -P -F "#D" -d -n "$host" "ssh $host"`
-    ((id+=1))
-    hostids[$id]=$id
-    hosts[$id]="$host"
-    pane_ids[$id]="$paneid"
+    if [ "-$paneid" != "-" ] ; then
+        ((id+=1))
+        hostids[$id]=$id
+        hosts[$id]="$host"
+        pane_ids[$id]="$paneid"
+    fi
 }
 
 prev_window () {
@@ -122,7 +119,6 @@ prev_window () {
     tmux swap-pane -t "{right}" -s "${curr_paneid}" -d
 }
 
-
 next_window () {
     host_count=${#hosts[*]}
     ((next_id=curr_id+1))
@@ -136,30 +132,29 @@ next_window () {
 }
 
 del_window () {
-    echo -n "\nremove this window? (y/n) "
-    curr_pane=${pane_ids[$curr_id]}
+    echo "\nremove this window? (y/n) "
     n=`get_keystroke`
     if [ "$n" = "y" ]; then
-        tmux kill-pane -t $curr_pane
-        if [ "$curr_pane" != "$prev_pane" ]; then
-            curr_pane=$prev_pane
-            join_pane $curr_pane
-        elif [ "$curr_pane" != "$next_pane" ]; then
-            curr_pane=$next_pane
-            join_pane $curr_pane
-        else
-            curr_pane=""
-        fi
+        del_id=$curr_id
+        next_window
+        del_pane=${pane_ids[$del_id]}
+        hostids=( ${hostids[*]/${hostids[$del_id]}} )
+        hosts=( ${hosts[*]/${hosts[$del_id]}} )
+        pane_ids=( ${pane_ids[*]/${pane_ids[$del_id]}} )
+        tmux kill-pane -t $del_pane
+        curr_id=$del_id
     fi
 }
 
 add_window () {
+    echo "add a host: "
+    host_id=${#hosts[*]}
     while [ 1 ]; do
-        read -p "add a host: " host
+        ((host_id+=1))
+        read -p "[$host_id] " host
         if [ "$host" != "" ]; then
             create_window "$host"
-            break
-        elif [ "$1" != "force" ]; then
+        elif [ "-$host" == "-" ]; then
             break
         fi
     done
@@ -238,51 +233,24 @@ else
 fi
 
 tmux select-window -t 1
-join_pane "2.1"
+join_pane ${pane_ids[$curr_id]}
 func_menu
-
 
 while [ 1 ]; do
     m=`get_keystroke`
     case "$m" in
-        OP|\[11~) #F2
-            split_pane
-            ;;
-        OQ|\[12~) #F2
-            next_window
-            ;;
-        OR|\[13~) #F3
-            prev_window
-            ;;
-        OS|\[14~) #F4
-            del_window
-            ;;
-        \[15~) #F5
-            tag_untag_window
-            ;;
-        \[17~) #F6
-            tag_untag_all_windows
-            ;;
-        \[18~) #F7
-            toggle_multicast
-            ;;
-        \[19~) #F8
-            add_window
-            ;;
-        \[20~) #F9
-            toggle_menu
-            ;;
-        \[21~) #F10
-            close_window
-            exit 0
-            ;;
-        \[22~) #F11
-            split_pane
-            ;;
-        *)
-            multicast "$m"
-            continue
-            ;;
+        OP|\[11~) split_pane ;;
+        OQ|\[12~) next_window ;;
+        OR|\[13~) prev_window ;;
+        OS|\[14~) tag_untag_window ;;
+        \[15~) tag_untag_all_windows ;;
+        \[17~) toggle_multicast ;;
+        \[18~) add_window ;;
+        \[19~) del_window;;
+        \[20~) toggle_menu ;;
+        \[21~) close_window ;;
+        \[22~) split_pane ;;
+        *) multicast "$m"; continue ;;
     esac
     func_menu
 done
