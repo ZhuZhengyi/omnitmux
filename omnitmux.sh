@@ -26,9 +26,9 @@ func_menu () {
     clear
     if [ $show_menu = 1 ]; then
         echo "======[ omni-tmux v0.1 ]======"
-        echo "$GREEN[F1]$NC: split right pane"
-        echo "$GREEN[F2]$NC: go next window"
-        echo "$GREEN[F3]$NC: go previous window"
+        echo "$GREEN[F1]$NC: go next window"
+        echo "$GREEN[F2]$NC: go previous window"
+        echo "$GREEN[F3]$NC: split right pane"
         echo "$GREEN[F4]$NC: tag/untag current window"
         echo "$GREEN[F5]$NC: tag/untag all windows"
         echo "$GREEN[F6]$NC: toggle multicast"
@@ -107,6 +107,17 @@ create_window () {
     fi
 }
 
+change_window () {
+    sel_id=$1
+    if [ $sel_id -eq $curr_id ] ; then
+        return
+    fi
+
+    curr_id=$sel_id
+    curr_paneid=${pane_ids[$curr_id]}
+    tmux swap-pane -t "{right}" -s "${curr_paneid}" -d
+}
+
 prev_window () {
     host_count=${#hosts[*]}
     ((prev_id=curr_id-1+host_count))
@@ -114,9 +125,7 @@ prev_window () {
     if [ $prev_id -lt 1 ] ; then
         prev_id=$host_count
     fi
-    curr_id=$prev_id
-    curr_paneid=${pane_ids[$curr_id]}
-    tmux swap-pane -t "{right}" -s "${curr_paneid}" -d
+    change_window $prev_id
 }
 
 next_window () {
@@ -126,9 +135,7 @@ next_window () {
     if [ $next_id -lt 1 ] ; then
         next_id=$host_count
     fi
-    curr_id=$next_id
-    curr_paneid=${pane_ids[$curr_id]}
-    tmux swap-pane -t "{right}" -s "${curr_paneid}" -d
+    change_window $next_id
 }
 
 del_window () {
@@ -147,7 +154,7 @@ del_window () {
 }
 
 add_window () {
-    echo "add a host: "
+    echo "\nadd a host: "
     host_id=${#hosts[*]}
     while [ 1 ]; do
         ((host_id+=1))
@@ -221,7 +228,6 @@ if [ ! -f `which tmux` ]; then
     exit 1
 fi
 
-
 host_file=$1
 
 if [ ! -z $host_file ] && [ -f $host_file ]; then
@@ -238,10 +244,13 @@ func_menu
 
 while [ 1 ]; do
     m=`get_keystroke`
+    #if `echo "$m" | grep -q -e "\d" ` && [ "$m" -ge 1  ] && [ "$m" -le ${#hosts[*]} ] ; then
+    #        change_window "$m"
+    #else
     case "$m" in
-        OP|\[11~) split_pane ;;
-        OQ|\[12~) next_window ;;
-        OR|\[13~) prev_window ;;
+        OP|\[11~) next_window ;;
+        OQ|\[12~) prev_window ;;
+        OR|\[13~) split_pane ;;
         OS|\[14~) tag_untag_window ;;
         \[15~) tag_untag_all_windows ;;
         \[17~) toggle_multicast ;;
@@ -252,5 +261,6 @@ while [ 1 ]; do
         \[22~) split_pane ;;
         *) multicast "$m"; continue ;;
     esac
+    #fi
     func_menu
 done
