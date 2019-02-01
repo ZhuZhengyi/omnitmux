@@ -2,7 +2,7 @@
 
 show_menu=0
 do_multicast=0
-mode=0
+mode=0          #0: cmd_mod, 1: type_mode
 menu_width=32
 curr_id=1
 declare -a hosts
@@ -14,6 +14,7 @@ RED="\033[1;31m"
 GREEN="\033[1;32m"
 BLINK="\033[1;38m"
 NC="\033[0m" # No Color
+ESC="27"
 
 print_text () {
     echo "$1$NC"
@@ -29,24 +30,28 @@ toggle_mode () {
 
 func_menu () {
     clear
+    mode_tip="============[cmd_mod]==========="
+    if [ $mode = 1 ] ; then
+        mode_tip="---------[type_mode]-----------"
+    fi
     if [ $show_menu = 1 ]; then
         echo "======[ omni-tmux v0.1 ]======"
-        echo "$GREEN[J]$NC: go next window"
-        echo "$GREEN[K]$NC: go previous window"
-        echo "$GREEN[N]$NC: split right pane"
-        echo "$GREEN[T]$NC: tag/untag current window"
-        echo "$GREEN[W]$NC: tag/untag all windows"
-        echo "$GREEN[C]$NC: toggle multicast"
-        echo "$GREEN[A]$NC: add host"
-        echo "$GREEN[D]$NC: delete current host"
-        echo "$GREEN[M]$NC: show/hide menu"
-        echo "$GREEN[I]$NC: enter type mode"
-        echo "$GREEN[X]$NC: quit program"
-        echo "$GREEN[F1]$NC: enter cmd mode"
-        echo "================================"
+        echo "$GREEN[j]$NC: go next host"
+        echo "$GREEN[k]$NC: go previous host"
+        echo "$GREEN[n]$NC: split right pane"
+        echo "$GREEN[m]$NC: mark/unmark current host"
+        echo "$GREEN[t]$NC: mark/unmark all hosts"
+        echo "$GREEN[c]$NC: toggle multicast"
+        echo "$GREEN[a]$NC: add new host"
+        echo "$GREEN[r]$NC: remove current host"
+        echo "$GREEN[q]$NC: enter type mode"
+        echo "$GREEN[x]$NC: exit program"
+        echo "$GREEN[F1]$NC: quit type mode"
+        echo "$GREEN[?]$NC: show/hide help menu"
+        echo $mode_tip
     else
-        echo "$GREEN[M]$NC: show/hide menu"
-        echo "================================"
+        echo "$GREEN[?]$NC: show/hide help info"
+        echo $mode_tip
     fi
 
     host_id=0
@@ -83,7 +88,7 @@ get_keystroke () {
 
 close_window() {
     echo "\nclose all remote connections?"
-    echo -n "([y]es/[n]o/[c]ancel) "
+    echo "([y]es/[n]o/[c]ancel) "
     n=`get_keystroke`
     if [ "$n" != "n" ] && [ "$n" != "y" ]; then
         return
@@ -256,18 +261,18 @@ while [ 1 ]; do
             change_window "$m"
         else
             case "$m" in
-                "i"|"I") toggle_mode ;;
+                #"q"|"Q") toggle_mode ;;
+                OP|\[11~|"q") toggle_mode ;;   #F1
                 "j"|"J") next_window ;;
                 "k"|"K") prev_window ;;
                 "n"|"N") split_pane ;;
                 "a"|"A") add_window ;;
-                "d"|"D") del_window ;;
+                "r"|"R") del_window ;;
                 "c"|"C") toggle_multicast ;;
+                "m"|"M") tag_untag_window ;;
+                "t"|"T") tag_untag_all_windows ;;
                 "x"|"X") close_window ;;
-                "t"|"T") tag_untag_window ;;
-                "w"|"W") tag_untag_all_windows ;;
-                "m"|"M") toggle_menu ;;
-                "l"|"L") tmux select-pane -t "{right}" ;;
+                "?") toggle_menu ;;
                 *) continue ;;
             esac
         fi
