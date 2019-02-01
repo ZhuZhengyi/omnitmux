@@ -30,10 +30,6 @@ toggle_mode () {
 
 func_menu () {
     clear
-    mode_tip="============[cmd_mod]==========="
-    if [ $mode = 1 ] ; then
-        mode_tip="---------[type_mode]-----------"
-    fi
     if [ $show_menu = 1 ]; then
         echo "======[ omni-tmux v0.1 ]======"
         echo "$GREEN[j]$NC: go next host"
@@ -41,17 +37,16 @@ func_menu () {
         echo "$GREEN[n]$NC: split right pane"
         echo "$GREEN[m]$NC: mark/unmark current host"
         echo "$GREEN[t]$NC: mark/unmark all hosts"
-        echo "$GREEN[c]$NC: toggle multicast"
         echo "$GREEN[a]$NC: add new host"
         echo "$GREEN[r]$NC: remove current host"
         echo "$GREEN[q]$NC: enter type mode"
         echo "$GREEN[x]$NC: exit program"
-        echo "$GREEN[F1]$NC: quit type mode"
+        echo "$GREEN[F1]$NC: toggle multicast"
         echo "$GREEN[?]$NC: show/hide help menu"
-        echo $mode_tip
+        echo "============================"
     else
         echo "$GREEN[?]$NC: show/hide help info"
-        echo $mode_tip
+        echo "============================"
     fi
 
     host_id=0
@@ -256,29 +251,30 @@ func_menu
 
 while [ 1 ]; do
     m=`get_keystroke`
-    if [ $mode -eq 0 ] ; then
+    if [ $do_multicast -eq 0 ] ; then
         if `echo "$m" | grep -q -e "\d" ` && [ "$m" -ge 1  ] && [ "$m" -le ${#hosts[*]} ] ; then
             change_window "$m"
         else
             case "$m" in
                 #"q"|"Q") toggle_mode ;;
-                OP|\[11~|"q") toggle_mode ;;   #F1
+                #OP|\[11~|"q") toggle_mode ;;   #F1
                 "j"|"J") next_window ;;
                 "k"|"K") prev_window ;;
                 "n"|"N") split_pane ;;
                 "a"|"A") add_window ;;
                 "r"|"R") del_window ;;
-                "c"|"C") toggle_multicast ;;
-                "m"|"M") tag_untag_window ;;
-                "t"|"T") tag_untag_all_windows ;;
+                "t") tag_untag_window ;;
+                "T") tag_untag_all_windows ;;
                 "x"|"X") close_window ;;
+                #"c"|"C") toggle_multicast ;;
+                OP|\[11~) toggle_multicast ;;   #F1
                 "?") toggle_menu ;;
                 *) continue ;;
             esac
         fi
     else
         case "$m" in
-            OP|\[11~) toggle_mode ;;   #F1
+            OP|\[11~) toggle_multicast ;;   #F1
             *) multicast "$m"; continue ;;
         esac
     fi
