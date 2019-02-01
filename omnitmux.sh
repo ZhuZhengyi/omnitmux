@@ -2,6 +2,7 @@
 
 show_menu=0
 do_multicast=0
+mode=0
 menu_width=32
 curr_id=1
 declare -a hosts
@@ -22,23 +23,29 @@ toggle_menu () {
     show_menu=$(($(($show_menu+1))%2))
 }
 
+toggle_mode () {
+    mode=$(($(($mode+1))%2))
+}
+
 func_menu () {
     clear
     if [ $show_menu = 1 ]; then
         echo "======[ omni-tmux v0.1 ]======"
-        echo "$GREEN[F1]$NC: go next window"
-        echo "$GREEN[F2]$NC: go previous window"
-        echo "$GREEN[F3]$NC: split right pane"
-        echo "$GREEN[F4]$NC: tag/untag current window"
-        echo "$GREEN[F5]$NC: tag/untag all windows"
-        echo "$GREEN[F6]$NC: toggle multicast"
-        echo "$GREEN[F7]$NC: add host"
-        echo "$GREEN[F8]$NC: remove current window"
-        echo "$GREEN[F9]$NC: show/hide menu"
-        echo "$GREEN[F10]$NC: quit program"
+        echo "$GREEN[J]$NC: go next window"
+        echo "$GREEN[K]$NC: go previous window"
+        echo "$GREEN[N]$NC: split right pane"
+        echo "$GREEN[T]$NC: tag/untag current window"
+        echo "$GREEN[W]$NC: tag/untag all windows"
+        echo "$GREEN[C]$NC: toggle multicast"
+        echo "$GREEN[A]$NC: add host"
+        echo "$GREEN[D]$NC: delete current host"
+        echo "$GREEN[M]$NC: show/hide menu"
+        echo "$GREEN[I]$NC: enter type mode"
+        echo "$GREEN[X]$NC: quit program"
+        echo "$GREEN[F1]$NC: enter cmd mode"
         echo "================================"
     else
-        echo "$GREEN[F9]$NC: show/hide menu"
+        echo "$GREEN[M]$NC: show/hide menu"
         echo "================================"
     fi
 
@@ -244,23 +251,31 @@ func_menu
 
 while [ 1 ]; do
     m=`get_keystroke`
-    #if `echo "$m" | grep -q -e "\d" ` && [ "$m" -ge 1  ] && [ "$m" -le ${#hosts[*]} ] ; then
-    #        change_window "$m"
-    #else
-    case "$m" in
-        OP|\[11~) next_window ;;
-        OQ|\[12~) prev_window ;;
-        OR|\[13~) split_pane ;;
-        OS|\[14~) tag_untag_window ;;
-        \[15~) tag_untag_all_windows ;;
-        \[17~) toggle_multicast ;;
-        \[18~) add_window ;;
-        \[19~) del_window;;
-        \[20~) toggle_menu ;;
-        \[21~) close_window ;;
-        \[22~) split_pane ;;
-        *) multicast "$m"; continue ;;
-    esac
-    #fi
+    if [ $mode -eq 0 ] ; then
+        if `echo "$m" | grep -q -e "\d" ` && [ "$m" -ge 1  ] && [ "$m" -le ${#hosts[*]} ] ; then
+            change_window "$m"
+        else
+            case "$m" in
+                "i"|"I") toggle_mode ;;
+                "j"|"J") next_window ;;
+                "k"|"K") prev_window ;;
+                "n"|"N") split_pane ;;
+                "a"|"A") add_window ;;
+                "d"|"D") del_window ;;
+                "c"|"C") toggle_multicast ;;
+                "x"|"X") close_window ;;
+                "t"|"T") tag_untag_window ;;
+                "w"|"W") tag_untag_all_windows ;;
+                "m"|"M") toggle_menu ;;
+                "l"|"L") tmux select-pane -t "{right}" ;;
+                *) continue ;;
+            esac
+        fi
+    else
+        case "$m" in
+            OP|\[11~) toggle_mode ;;   #F1
+            *) multicast "$m"; continue ;;
+        esac
+    fi
     func_menu
 done
