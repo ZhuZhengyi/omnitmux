@@ -2,9 +2,9 @@
 
 show_menu=0
 do_multicast=0
-mode=0          #0: cmd_mod, 1: type_mode
 menu_width=32
 curr_id=1
+omnipane=$TMUX_PANE
 declare -a hosts
 declare -a hostids
 declare -a pane_ids
@@ -16,6 +16,12 @@ BLINK="\033[1;38m"
 NC="\033[0m" # No Color
 ESC="27"
 
+tmux set-option allow-rename off
+tmux set-option automatic-rename off
+tmux select-pane -T "omnitmux"
+#tmux set-option set-titles on
+#tmux set-option set-titles-string "#T"
+
 print_text () {
     echo "$1$NC"
 }
@@ -24,11 +30,39 @@ toggle_menu () {
     show_menu=$(($(($show_menu+1))%2))
 }
 
-toggle_mode () {
+toggle_mode() {
     mode=$(($(($mode+1))%2))
 }
 
-func_menu () {
+is_host_active() {
+    host="$1"
+    active=0
+    active_hosts=`tmux list-panes -s -F "#T"`
+    for h in `echo "$active_hosts"` ; do
+        if [ "-$h" == "-$host" ]; then
+            active=1
+            break
+        fi
+    done
+
+    echo "$active"
+}
+
+get_host_id() {
+    host="$1"
+    id=1
+    for h in ${hosts[*]} ; do
+        if [ "-$h" == "-$host" ]; then
+            echo "$id"
+            return
+        fi
+        ((id+=1))
+    done
+    echo "$id"
+}
+
+func_menu() {
+    active_hosts=`tmux list-panes -s -F "#T"`
     clear
     if [ $show_menu = 1 ]; then
         echo "======[ omni-tmux v0.1 ]======"
@@ -38,7 +72,7 @@ func_menu () {
         echo "$GREEN[m]$NC: mark/unmark current host"
         echo "$GREEN[t]$NC: mark/unmark all hosts"
         echo "$GREEN[a]$NC: add new host"
-        echo "$GREEN[r]$NC: remove current host"
+        echo "$GREEN[d]$NC: delete current host"
         echo "$GREEN[q]$NC: enter type mode"
         echo "$GREEN[x]$NC: exit program"
         echo "$GREEN[F1]$NC: toggle multicast"
@@ -49,16 +83,31 @@ func_menu () {
         echo "============================"
     fi
 
-    host_id=0
+    host_id=1
     for host in ${hosts[@]}; do
-        ((host_id+=1))
+        active=0
+        tagged=0
         line_text="[$host_id] $host"
-        for id in ${tagged_ids[*]} ; do
-            if [ "$id" == "$host_id" ] ; then
-                line_text="$line_text *"
+
+        for h in `echo "$active_hosts"` ; do
+            if [ "-$h" == "-$host" ]; then
+                active=1
                 break
             fi
         done
+
+        for id in ${tagged_ids[*]} ; do
+            if [ "$id" == "$host_id" ] ; then
+                tagged=1
+                break
+            fi
+        done
+
+        if [ $active -ne 1 ] ; then
+            line_text="$line_text x"
+        elif [ $tagged -eq 1 ] ; then
+            line_text="$line_text *"
+        fi
 
         if [ $host_id -eq $curr_id ] ; then
             line_text="$GREEN$line_text"
@@ -66,6 +115,7 @@ func_menu () {
             line_text="$RED$line_text"
         fi
         print_text "$line_text"
+        ((host_id+=1))
     done
 
     if [ $do_multicast = 1 ]; then
@@ -81,7 +131,7 @@ get_keystroke () {
     stty $old_stty_settings
 }
 
-close_window() {
+exit_omnitmux() {
     echo "\nclose all remote connections?"
     echo "([y]es/[n]o/[c]ancel) "
     n=`get_keystroke`
@@ -102,6 +152,20 @@ join_pane () {
     tmux resize-pane -t "{left}" -x "$menu_width"
 }
 
+connect_host () {
+    host="$1"
+    active=$(is_host_active $host)
+    id=$(get_host_id $host)
+    if [ $active -ne 1 ] ; then
+        paneid=`tmux new-window -P -F "#D" -d -n "$host" "ssh $host"`
+        hostids[$id]=$id
+        hosts[$id]="$host"
+        pane_ids[$id]="$paneid"
+        tmux select-pane -T "$host" -t $paneid
+        tmux select-pane -t $omnipane
+    fi
+}
+
 create_window () {
     host="$1"
     id=${#hosts[*]}
@@ -114,7 +178,8 @@ create_window () {
     fi
 }
 
-change_window () {
+
+switch_host () {
     sel_id=$1
     if [ $sel_id -eq $curr_id ] ; then
         return
@@ -125,32 +190,32 @@ change_window () {
     tmux swap-pane -t "{right}" -s "${curr_paneid}" -d
 }
 
-prev_window () {
+pre_host () {
     host_count=${#hosts[*]}
     ((prev_id=curr_id-1+host_count))
     ((prev_id%=host_count))
     if [ $prev_id -lt 1 ] ; then
         prev_id=$host_count
     fi
-    change_window $prev_id
+    switch_host $prev_id
 }
 
-next_window () {
+next_host () {
     host_count=${#hosts[*]}
     ((next_id=curr_id+1))
     ((next_id%=host_count))
     if [ $next_id -lt 1 ] ; then
         next_id=$host_count
     fi
-    change_window $next_id
+    switch_host $next_id
 }
 
-del_window () {
+del_host () {
     echo "\nremove this window? (y/n) "
     n=`get_keystroke`
     if [ "$n" = "y" ]; then
         del_id=$curr_id
-        next_window
+        next_host
         del_pane=${pane_ids[$del_id]}
         hostids=( ${hostids[*]/${hostids[$del_id]}} )
         hosts=( ${hosts[*]/${hosts[$del_id]}} )
@@ -160,14 +225,15 @@ del_window () {
     fi
 }
 
-add_window () {
+add_host () {
     echo "\nadd a host: "
     host_id=${#hosts[*]}
     while [ 1 ]; do
         ((host_id+=1))
         read -p "[$host_id] " host
         if [ "$host" != "" ]; then
-            create_window "$host"
+            #create_window "$host"
+            connect_host "$host"
         elif [ "-$host" == "-" ]; then
             break
         fi
@@ -192,7 +258,7 @@ split_pane () {
     tmux split-window -v -t "{right}" "ssh $host"
 }
 
-tag_untag_all_windows () {
+toggle_tag_all_hosts () {
     tagged_ids_count=${#tagged_ids[*]}
     if [ $tagged_ids_count -eq 0 ] ; then
         tagged_ids=( ${hostids[*]} )
@@ -202,7 +268,7 @@ tag_untag_all_windows () {
     echo "tagged count: $tagged_ids_count  ${tagged_ids[*]} "
 }
 
-tag_untag_window () {
+toggle_tag_host () {
     found=0
 
     declare -a new_tagged_ids
@@ -239,10 +305,11 @@ host_file=$1
 
 if [ ! -z $host_file ] && [ -f $host_file ]; then
     for host in `cat $host_file`; do
-        create_window "$host"
+        connect_host "$host"
+        #create_window "$host"
     done
 else
-    add_window force
+    add_host force
 fi
 
 tmux select-window -t 1
@@ -253,28 +320,26 @@ while [ 1 ]; do
     m=`get_keystroke`
     if [ $do_multicast -eq 0 ] ; then
         if `echo "$m" | grep -q -e "\d" ` && [ "$m" -ge 1  ] && [ "$m" -le ${#hosts[*]} ] ; then
-            change_window "$m"
+            switch_host "$m"
         else
             case "$m" in
-                #"q"|"Q") toggle_mode ;;
-                #OP|\[11~|"q") toggle_mode ;;   #F1
-                "j"|"J") next_window ;;
-                "k"|"K") prev_window ;;
+                "j"|"J") next_host ;;
+                "k"|"K") pre_host ;;
                 "n"|"N") split_pane ;;
-                "a"|"A") add_window ;;
-                "r"|"R") del_window ;;
-                "t") tag_untag_window ;;
-                "T") tag_untag_all_windows ;;
-                "x"|"X") close_window ;;
-                #"c"|"C") toggle_multicast ;;
-                OP|\[11~) toggle_multicast ;;   #F1
+                "a"|"A") add_host ;;
+                "d"|"D") del_host ;;
+                "r"|"R") connect_host ${hosts[$curr_id]} ;;
+                "t") toggle_tag_host ;;
+                "T") toggle_tag_all_hosts ;;
+                "x"|"X") exit_omnitmux ;;
+                |"c"|"C") toggle_multicast ;;
                 "?") toggle_menu ;;
                 *) continue ;;
             esac
         fi
     else
         case "$m" in
-            OP|\[11~) toggle_multicast ;;   #F1
+            ) toggle_multicast ;;    #ESC
             *) multicast "$m"; continue ;;
         esac
     fi
