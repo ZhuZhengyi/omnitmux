@@ -103,9 +103,9 @@ func_menu() {
         done
 
         if [ $active -ne 1 ] ; then
-            line_text="$line_text x"
+            line_text="$line_text \tx"
         elif [ $tagged -eq 1 ] ; then
-            line_text="$line_text *"
+            line_text="$line_text \t*"
         fi
 
         if [ $host_id -eq $curr_id ] ; then
@@ -131,7 +131,7 @@ get_keystroke () {
 }
 
 exit_omnitmux() {
-    echo "\nclose all remote connections?"
+    echo -e "\nclose all remote connections?"
     echo "([y]es/[n]o/[c]ancel) "
     n=`get_keystroke`
     if [ "$n" != "n" ] && [ "$n" != "y" ]; then
@@ -176,6 +176,19 @@ switch_host () {
     curr_id=$sel_id
 }
 
+switch_host_end () {
+    id=${#hosts[@]}
+    ((id-=1))
+    switch_host $id
+}
+
+switch_host_mid () {
+    id=${#hosts[@]}
+    ((id-=1))
+    ((id/=2))
+    switch_host $id
+}
+
 pre_host () {
     host_count=${#hosts[*]}
     ((prev_id=curr_id-1+host_count))
@@ -207,7 +220,7 @@ del_host () {
 }
 
 add_host () {
-    echo "\nadd host: "
+    echo -e "\nadd host: "
     host_id=${#hosts[*]}
     while [ 1 ]; do
         ((host_id+=1))
@@ -286,7 +299,6 @@ host_file=$1
 if [ ! -z $host_file ] && [ -f $host_file ]; then
     for host in `cat $host_file`; do
         connect_host "$host"
-        #create_window "$host"
     done
 else
     add_host force
@@ -298,9 +310,11 @@ func_menu
 
 while [ 1 ]; do
     m=$(get_keystroke)
+    hid=0
     if [ $do_multicast -eq 0 ] ; then
         if `echo "$m" | grep -q -e "\d" ` && [ "$m" -ge 1  ] && [ "$m" -le ${#hosts[*]} ] ; then
-            switch_host "$m"
+            ((hid=m-1))
+            switch_host "$hid"
         else
             case "$m" in
                 "j"|"J") next_host ;;
@@ -308,9 +322,11 @@ while [ 1 ]; do
                 "n"|"N") split_pane ;;
                 "a"|"A") add_host ;;
                 "d"|"D") del_host ;;
-                "r"|"R") connect_host ${hosts[$curr_id]} ;;
+                "r") connect_host ${hosts[$curr_id]} ;;
                 "t") toggle_tag_host ;;
                 "T") toggle_tag_all_hosts ;;
+                "e") switch_host_end ;;
+                "m") switch_host_mid ;;
                 "x"|"X") exit_omnitmux ;;
                 "c"|"C") toggle_multicast ;;
                 "?") toggle_menu ;;
