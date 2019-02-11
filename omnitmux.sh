@@ -1,14 +1,14 @@
-#!/bin/sh
+#!/bin/bash
 
 show_menu=0
 do_multicast=0
 menu_width=32
-curr_id=1
+curr_id=0
 omnipane=$TMUX_PANE
-declare -a hosts
-declare -a hostids
-declare -a pane_ids
-declare -a tagged_ids
+ids=()
+hosts=()
+panes=()
+tagged_ids=()
 
 RED="\033[1;31m"
 GREEN="\033[1;32m"
@@ -18,12 +18,9 @@ ESC="27"
 
 tmux set-option allow-rename off
 tmux set-option automatic-rename off
-tmux select-pane -T "omnitmux"
-#tmux set-option set-titles on
-#tmux set-option set-titles-string "#T"
 
 print_text () {
-    echo "$1$NC"
+    echo -e "$1$NC"
 }
 
 toggle_menu () {
@@ -50,7 +47,7 @@ is_host_active() {
 
 get_host_id() {
     host="$1"
-    id=1
+    id=0
     for h in ${hosts[*]} ; do
         if [ "-$h" == "-$host" ]; then
             echo "$id"
@@ -66,28 +63,30 @@ func_menu() {
     clear
     if [ $show_menu = 1 ]; then
         echo "======[ omni-tmux v0.1 ]======"
-        echo "$GREEN[j]$NC: go next host"
-        echo "$GREEN[k]$NC: go previous host"
-        echo "$GREEN[n]$NC: split right pane"
-        echo "$GREEN[m]$NC: mark/unmark current host"
-        echo "$GREEN[t]$NC: mark/unmark all hosts"
-        echo "$GREEN[a]$NC: add new host"
-        echo "$GREEN[d]$NC: delete current host"
-        echo "$GREEN[q]$NC: enter type mode"
-        echo "$GREEN[x]$NC: exit program"
-        echo "$GREEN[F1]$NC: toggle multicast"
-        echo "$GREEN[?]$NC: show/hide help menu"
+        echo -e "$GREEN[j]$NC: go next host"
+        echo -e "$GREEN[k]$NC: go previous host"
+        echo -e "$GREEN[n]$NC: split right pane"
+        echo -e "$GREEN[m]$NC: mark/unmark current host"
+        echo -e "$GREEN[t]$NC: mark/unmark all hosts"
+        echo -e "$GREEN[a]$NC: add new host"
+        echo -e "$GREEN[d]$NC: delete current host"
+        echo -e "$GREEN[q]$NC: enter type mode"
+        echo -e "$GREEN[x]$NC: exit program"
+        echo -e "$GREEN[F1]$NC: toggle multicast"
+        echo -e "$GREEN[?]$NC: show/hide help menu"
         echo "============================"
     else
-        echo "$GREEN[?]$NC: show/hide help info"
+        echo -e "$GREEN[?]$NC: show/hide help info"
         echo "============================"
     fi
 
-    host_id=1
+    host_id=0
+    hid=1
     for host in ${hosts[@]}; do
         active=0
         tagged=0
-        line_text="[$host_id] $host"
+        ((hid=host_id+1))
+        line_text="[$hid] $host"
 
         for h in `echo "$active_hosts"` ; do
             if [ "-$h" == "-$host" ]; then
@@ -139,7 +138,7 @@ exit_omnitmux() {
         return
     elif [ "$n" = "y" ]; then
         echo  "close windows ... "
-        for pid in ${pane_ids[*]} ; do
+        for pid in ${panes[*]} ; do
             tmux kill-pane -t "${pid}"
         done
         tput rc; tput cnorm
@@ -158,26 +157,13 @@ connect_host () {
     id=$(get_host_id $host)
     if [ $active -ne 1 ] ; then
         paneid=`tmux new-window -P -F "#D" -d -n "$host" "ssh $host"`
-        hostids[$id]=$id
+        ids[$id]=$id
         hosts[$id]="$host"
-        pane_ids[$id]="$paneid"
+        panes[$id]="$paneid"
         tmux select-pane -T "$host" -t $paneid
         tmux select-pane -t $omnipane
     fi
 }
-
-create_window () {
-    host="$1"
-    id=${#hosts[*]}
-    paneid=`tmux new-window -P -F "#D" -d -n "$host" "ssh $host"`
-    if [ "-$paneid" != "-" ] ; then
-        ((id+=1))
-        hostids[$id]=$id
-        hosts[$id]="$host"
-        pane_ids[$id]="$paneid"
-    fi
-}
-
 
 switch_host () {
     sel_id=$1
@@ -185,18 +171,15 @@ switch_host () {
         return
     fi
 
+    sel_pane="${panes[$sel_id]}"
+    tmux swap-pane -d -t "{right}" -s "$sel_pane"
     curr_id=$sel_id
-    curr_paneid=${pane_ids[$curr_id]}
-    tmux swap-pane -t "{right}" -s "${curr_paneid}" -d
 }
 
 pre_host () {
     host_count=${#hosts[*]}
     ((prev_id=curr_id-1+host_count))
     ((prev_id%=host_count))
-    if [ $prev_id -lt 1 ] ; then
-        prev_id=$host_count
-    fi
     switch_host $prev_id
 }
 
@@ -204,35 +187,32 @@ next_host () {
     host_count=${#hosts[*]}
     ((next_id=curr_id+1))
     ((next_id%=host_count))
-    if [ $next_id -lt 1 ] ; then
-        next_id=$host_count
-    fi
     switch_host $next_id
 }
 
 del_host () {
-    echo "\nremove this window? (y/n) "
+    echo "\nremove this host? (y/n) "
     n=`get_keystroke`
     if [ "$n" = "y" ]; then
         del_id=$curr_id
+        del_pane=${panes[$del_id]}
+        delhost=${hosts[$del_id]}
         next_host
-        del_pane=${pane_ids[$del_id]}
-        hostids=( ${hostids[*]/${hostids[$del_id]}} )
-        hosts=( ${hosts[*]/${hosts[$del_id]}} )
-        pane_ids=( ${pane_ids[*]/${pane_ids[$del_id]}} )
         tmux kill-pane -t $del_pane
+        ids=( ${ids[@]/${#ids[@]}} )
+        hosts=( ${hosts[@]/"$delhost"} )
+        panes=( ${panes[@]/"$del_pane"} )
         curr_id=$del_id
     fi
 }
 
 add_host () {
-    echo "\nadd a host: "
+    echo "\nadd host: "
     host_id=${#hosts[*]}
     while [ 1 ]; do
         ((host_id+=1))
         read -p "[$host_id] " host
         if [ "$host" != "" ]; then
-            #create_window "$host"
             connect_host "$host"
         elif [ "-$host" == "-" ]; then
             break
@@ -241,12 +221,12 @@ add_host () {
 }
 
 multicast () {
-    curr_pane=${pane_ids[$curr_id]}
+    curr_pane=${panes[$curr_id]}
     tmux send-keys -t $curr_pane "$@"
     if [ $do_multicast = 1 ]; then
         for id in ${tagged_ids[*]} ; do
             if [ $id -ne $curr_id ] ; then
-                paneid=${pane_ids[$id]}
+                paneid=${panes[$id]}
                 tmux send-keys -t $paneid "$@"
             fi
         done
@@ -261,7 +241,7 @@ split_pane () {
 toggle_tag_all_hosts () {
     tagged_ids_count=${#tagged_ids[*]}
     if [ $tagged_ids_count -eq 0 ] ; then
-        tagged_ids=( ${hostids[*]} )
+        tagged_ids=( ${ids[*]} )
     else
         tagged_ids=()
     fi
@@ -313,11 +293,11 @@ else
 fi
 
 tmux select-window -t 1
-join_pane ${pane_ids[$curr_id]}
+join_pane ${panes[$curr_id]}
 func_menu
 
 while [ 1 ]; do
-    m=`get_keystroke`
+    m=$(get_keystroke)
     if [ $do_multicast -eq 0 ] ; then
         if `echo "$m" | grep -q -e "\d" ` && [ "$m" -ge 1  ] && [ "$m" -le ${#hosts[*]} ] ; then
             switch_host "$m"
@@ -332,7 +312,7 @@ while [ 1 ]; do
                 "t") toggle_tag_host ;;
                 "T") toggle_tag_all_hosts ;;
                 "x"|"X") exit_omnitmux ;;
-                |"c"|"C") toggle_multicast ;;
+                "c"|"C") toggle_multicast ;;
                 "?") toggle_menu ;;
                 *) continue ;;
             esac
