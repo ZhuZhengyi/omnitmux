@@ -66,17 +66,17 @@ func_menu() {
         echo -e "$GREEN[j]$NC: go next host"
         echo -e "$GREEN[k]$NC: go previous host"
         echo -e "$GREEN[n]$NC: split right pane"
-        echo -e "$GREEN[m]$NC: mark/unmark current host"
-        echo -e "$GREEN[t]$NC: mark/unmark all hosts"
+        echo -e "$GREEN[t]$NC: mark/unmark current host"
+        echo -e "$GREEN[T]$NC: mark/unmark all hosts"
         echo -e "$GREEN[a]$NC: add new host"
         echo -e "$GREEN[d]$NC: delete current host"
-        echo -e "$GREEN[q]$NC: enter type mode"
+        echo -e "$GREEN[r]$NC: reconnect current host"
+        echo -e "$GREEN[ESC]$NC: toggle multicast mode"
         echo -e "$GREEN[x]$NC: exit program"
-        echo -e "$GREEN[F1]$NC: toggle multicast"
-        echo -e "$GREEN[?]$NC: show/hide help menu"
+        echo -e "$GREEN[?]$NC: toggle help info"
         echo "============================"
     else
-        echo -e "$GREEN[?]$NC: show/hide help info"
+        echo -e "$GREEN[?]$NC: toggle help info"
         echo "============================"
     fi
 
@@ -213,7 +213,7 @@ next_host () {
 }
 
 del_host () {
-    echo "\nremove this host? (y/n) "
+    echo -e "\nremove this host? (y/n) "
     n=`get_keystroke`
     if [ "$n" = "y" ]; then
         del_id=$curr_id
@@ -320,7 +320,6 @@ func_menu
 while [ 1 ]; do
     m=$(get_keystroke)
     hid=0
-    #echo "key: $m"
     if [ $do_multicast -eq 0 ] ; then
         if `echo "$m" | grep -q -e "\d" ` && [ "$m" -ge 1  ] && [ "$m" -le ${#hosts[*]} ] ; then
             ((hid=m-1))
@@ -337,10 +336,10 @@ while [ 1 ]; do
                 "t") toggle_tag_host ;;
                 "T") toggle_tag_all_hosts ;;
                 "e") switch_host_end ;;
-                ) tmux select-pane -t "{right}" ;;
+                "'") tmux select-pane -t "{right}" ;;
                 "m") switch_host_mid ;;
                 "x"|"X") exit_omnitmux ;;
-                "c"|"C") toggle_multicast ;;
+                ) toggle_multicast ;;    #ESC
                 "?") toggle_menu ;;
                 *) continue ;;
             esac
