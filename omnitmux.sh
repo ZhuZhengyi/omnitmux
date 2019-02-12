@@ -165,6 +165,15 @@ connect_host () {
     fi
 }
 
+reconnect_hosts() {
+    for host in ${hosts[@]} ; do
+        active=$(is_host_active $host)
+        if [ $active -ne 1 ] ; then
+            connect_host $host
+        fi
+    done
+}
+
 switch_host () {
     sel_id=$1
     if [ $sel_id -eq $curr_id ] ; then
@@ -311,6 +320,7 @@ func_menu
 while [ 1 ]; do
     m=$(get_keystroke)
     hid=0
+    #echo "key: $m"
     if [ $do_multicast -eq 0 ] ; then
         if `echo "$m" | grep -q -e "\d" ` && [ "$m" -ge 1  ] && [ "$m" -le ${#hosts[*]} ] ; then
             ((hid=m-1))
@@ -323,9 +333,11 @@ while [ 1 ]; do
                 "a"|"A") add_host ;;
                 "d"|"D") del_host ;;
                 "r") connect_host ${hosts[$curr_id]} ;;
+                "R") reconnect_hosts ;;
                 "t") toggle_tag_host ;;
                 "T") toggle_tag_all_hosts ;;
                 "e") switch_host_end ;;
+                ) tmux select-pane -t "{right}" ;;
                 "m") switch_host_mid ;;
                 "x"|"X") exit_omnitmux ;;
                 "c"|"C") toggle_multicast ;;
