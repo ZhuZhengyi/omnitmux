@@ -313,7 +313,7 @@ else
     add_host force
 fi
 
-tmux select-window -t 1
+tmux select-pane -t $TMUX_PANE
 join_pane ${panes[$curr_id]}
 func_menu
 
