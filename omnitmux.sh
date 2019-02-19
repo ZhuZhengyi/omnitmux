@@ -339,7 +339,7 @@ while [ 1 ]; do
                 "'") tmux select-pane -t "{right}" ;;
                 "m") switch_host_mid ;;
                 "x"|"X") exit_omnitmux ;;
-                ) toggle_multicast ;;    #ESC
+                "c") toggle_multicast ;;
                 "?") toggle_menu ;;
                 *) continue ;;
             esac
