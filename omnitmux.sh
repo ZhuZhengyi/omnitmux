@@ -4,6 +4,7 @@ show_menu=0
 do_multicast=0
 menu_width=32
 curr_id=0
+stage="cluster"      #0,cluster; 1,hosts
 omnipane=$TMUX_PANE
 ids=()
 hosts=()
@@ -15,6 +16,8 @@ GREEN="\033[1;32m"
 BLINK="\033[1;38m"
 NC="\033[0m" # No Color
 ESC="27"
+
+CLUSTER_CONF="$HOME/.config/omnitmux/cluster.ini"
 
 tmux set-option allow-rename off
 tmux set-option automatic-rename off
@@ -58,28 +61,24 @@ get_host_id() {
     echo "$id"
 }
 
-func_menu() {
-    active_hosts=`tmux list-panes -s -F "#T"`
-    clear
-    if [ $show_menu = 1 ]; then
-        echo "======[ omni-tmux v0.1 ]======"
-        echo -e "$GREEN[j]$NC: go next host"
-        echo -e "$GREEN[k]$NC: go previous host"
-        echo -e "$GREEN[n]$NC: split right pane"
-        echo -e "$GREEN[t]$NC: mark/unmark current host"
-        echo -e "$GREEN[T]$NC: mark/unmark all hosts"
-        echo -e "$GREEN[a]$NC: add new host"
-        echo -e "$GREEN[d]$NC: delete current host"
-        echo -e "$GREEN[r]$NC: reconnect current host"
-        echo -e "$GREEN[ESC]$NC: toggle multicast mode"
-        echo -e "$GREEN[x]$NC: exit program"
-        echo -e "$GREEN[?]$NC: toggle help info"
-        echo "============================"
-    else
-        echo -e "$GREEN[?]$NC: toggle help info"
-        echo "============================"
-    fi
+curr_cid=0
 
+show_clusters() {
+    clusters=`cat $CLUSTER_CONF | grep "^\[.*\]" | tr -d "[]"`
+    cluster_id=0
+    cid=1
+    for cluster in `echo $clusters`; do
+        ((cid=cluster_id+1))
+        line_text="[$cid] $cluster"
+        if [ $cluster_id -eq $curr_cid ] ; then
+            line_text="$GREEN$line_text"
+        fi
+        print_text "$line_text"
+        ((cluster_id+=1))
+    done
+}
+
+show_hosts() {
     host_id=0
     hid=1
     for host in ${hosts[@]}; do
@@ -120,6 +119,34 @@ func_menu() {
     if [ $do_multicast = 1 ]; then
         print_text  "\n$BLINK!!! MULTICAST MODE !!!"
     fi
+}
+
+func_menu() {
+    active_hosts=`tmux list-panes -s -F "#T"`
+    clear
+    if [ $show_menu = 1 ]; then
+        echo "======[ omni-tmux v0.1 ]======"
+        echo -e "$GREEN[j]$NC: go next host"
+        echo -e "$GREEN[k]$NC: go previous host"
+        echo -e "$GREEN[n]$NC: split right pane"
+        echo -e "$GREEN[t]$NC: mark/unmark current host"
+        echo -e "$GREEN[T]$NC: mark/unmark all hosts"
+        echo -e "$GREEN[a]$NC: add new host"
+        echo -e "$GREEN[d]$NC: delete current host"
+        echo -e "$GREEN[r]$NC: reconnect current host"
+        echo -e "$GREEN[ESC]$NC: toggle multicast mode"
+        echo -e "$GREEN[x]$NC: exit program"
+        echo -e "$GREEN[?]$NC: toggle help info"
+        echo "============================"
+    else
+        echo -e "$GREEN[?]$NC: toggle help info"
+        echo "============================"
+    fi
+
+    case $stage in
+        "cluster") show_clusters ;;
+        *) show_hosts ;;
+    esac
     tput sc;tput civis
 }
 
@@ -196,6 +223,19 @@ switch_host_mid () {
     ((id-=1))
     ((id/=2))
     switch_host $id
+}
+
+pre_cluster () {
+    host_count=${#hosts[*]}
+    ((prev_id=curr_id-1+host_count))
+    ((prev_id%=host_count))
+    switch_host $prev_id
+}
+
+next_cluster () {
+    host_count=${#hosts[*]}
+    ((next_id=curr_cid+1))
+    ((next_id%=host_count))
 }
 
 pre_host () {
@@ -298,26 +338,21 @@ toggle_multicast () {
     fi
 }
 
-if [ ! -f `which tmux` ]; then
-    echo "$0: tmux not found"
-    exit 1
-fi
 
-host_file=$1
+stage_cluster() {
+    m=$(get_keystroke)
+    hid=0
+    case "$m" in
+        "j"|"J") ((curr_cid+=1)) ;;
+        "k"|"K") ((curr_cid-=1)) ;;
+        ) stage="hosts" ;;
+        "x"|"X") exit_omnitmux ;;
+        "?") toggle_menu ;;
+        *) continue ;;
+    esac
+}
 
-if [ ! -z $host_file ] && [ -f $host_file ]; then
-    for host in `cat $host_file`; do
-        connect_host "$host"
-    done
-else
-    add_host force
-fi
-
-tmux select-pane -t $TMUX_PANE
-join_pane ${panes[$curr_id]}
-func_menu
-
-while [ 1 ]; do
+stage_host() {
     m=$(get_keystroke)
     hid=0
     if [ $do_multicast -eq 0 ] ; then
@@ -350,5 +385,36 @@ while [ 1 ]; do
             *) multicast "$m"; continue ;;
         esac
     fi
+}
+
+run() {
+    tmux select-pane -t $TMUX_PANE
+    join_pane ${panes[$curr_id]}
     func_menu
-done
+
+    while [ 1 ]; do
+        case $stage in
+            "cluster") stage_cluster ;;
+            *) stage_host ;;
+        esac
+        func_menu
+    done
+}
+
+if [ ! -f `which tmux` ]; then
+    echo "$0: tmux not found"
+    exit 1
+fi
+
+host_file=$1
+if [ ! -z $host_file ] && [ -f $host_file ]; then
+    stage="hosts"
+    for host in `cat $host_file | grep -v "^#" | grep -v "^$"`; do
+        connect_host "$host"
+    done
+#else
+#    add_host force
+fi
+
+run
+
