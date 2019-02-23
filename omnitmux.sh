@@ -1,15 +1,19 @@
 #!/bin/bash
 
+debug=0
 show_menu=0
 do_multicast=0
 menu_width=32
-curr_id=0
-stage="cluster"      #0,cluster; 1,hosts
-omnipane=$TMUX_PANE
+left_pane=$TMUX_PANE
 ids=()
 hosts=()
 panes=()
 tagged_ids=()
+clusters=()
+cluster_id=0
+curr_hid=0
+curr_cid=0
+stage="cluster"      #0,cluster; 1,hosts
 
 RED="\033[1;31m"
 GREEN="\033[1;32m"
@@ -18,6 +22,7 @@ NC="\033[0m" # No Color
 ESC="27"
 
 CLUSTER_CONF="$HOME/.config/omnitmux/cluster.ini"
+CLUSTER_PATH="$HOME/.config/omnitmux/clusters"
 
 tmux set-option allow-rename off
 tmux set-option automatic-rename off
@@ -61,24 +66,66 @@ get_host_id() {
     echo "$id"
 }
 
-curr_cid=0
+load_hosts() {
+    host_file=$1
+    if [ ! -z $host_file ] && [ -f $host_file ]; then
+        id=0
+        for host in `cat $host_file | grep -v "^#" | grep -v "^$"`; do
+            hosts[$id]=$host
+            ((id+=1))
+        done
+    fi
+}
 
-show_clusters() {
-    clusters=`cat $CLUSTER_CONF | grep "^\[.*\]" | tr -d "[]"`
-    cluster_id=0
-    cid=1
-    for cluster in `echo $clusters`; do
-        ((cid=cluster_id+1))
-        line_text="[$cid] $cluster"
-        if [ $cluster_id -eq $curr_cid ] ; then
-            line_text="$GREEN$line_text"
-        fi
-        print_text "$line_text"
-        ((cluster_id+=1))
+connect_host () {
+    host="$1"
+    active=$(is_host_active $host)
+    id=$(get_host_id $host)
+    if [ $active -ne 1 ] ; then
+        paneid=`tmux new-window -P -F "#D" -d -n "$host" "ssh $host"`
+        ids[$id]=$id
+        panes[$id]="$paneid"
+        tmux select-pane -T "$host" -t $paneid
+        tmux select-pane -t $left_pane
+    fi
+}
+
+connect_hosts() {
+    id=0
+    for host in ${hosts[*]} ; do
+        connect_host $host
     done
 }
 
-show_hosts() {
+close_hosts() {
+    for pid in ${panes[*]} ; do
+        tmux kill-pane -t "${pid}"
+    done
+}
+
+load_clusters() {
+    id=0
+    for c in `ls -1 $CLUSTER_PATH` ; do
+        clusters[$id]=$c
+        ((id+=1))
+    done
+}
+
+show_stage_clusters() {
+    id=0
+    cid=0
+    for cluster in `echo ${clusters[*]}`; do
+        ((cid=id+1))
+        line_text="[$cid] $cluster"
+        if [ $id -eq $curr_cid ] ; then
+            line_text="$GREEN$line_text"
+        fi
+        print_text "$line_text"
+        ((id+=1))
+    done
+}
+
+show_stage_hosts() {
     host_id=0
     hid=1
     for host in ${hosts[@]}; do
@@ -107,7 +154,7 @@ show_hosts() {
             line_text="$line_text \t*"
         fi
 
-        if [ $host_id -eq $curr_id ] ; then
+        if [ $host_id -eq $curr_hid ] ; then
             line_text="$GREEN$line_text"
         elif [ $do_multicast = 1 ]; then
             line_text="$RED$line_text"
@@ -123,7 +170,7 @@ show_hosts() {
 
 func_menu() {
     active_hosts=`tmux list-panes -s -F "#T"`
-    clear
+    [ $debug -eq 0 ] && clear
     if [ $show_menu = 1 ]; then
         echo "======[ omni-tmux v0.1 ]======"
         echo -e "$GREEN[j]$NC: go next host"
@@ -144,8 +191,8 @@ func_menu() {
     fi
 
     case $stage in
-        "cluster") show_clusters ;;
-        *) show_hosts ;;
+        "cluster") show_stage_clusters ;;
+        *) show_stage_hosts ;;
     esac
     tput sc;tput civis
 }
@@ -157,6 +204,7 @@ get_keystroke () {
     stty $old_stty_settings
 }
 
+
 exit_omnitmux() {
     echo -e "\nclose all remote connections?"
     echo "([y]es/[n]o/[c]ancel) "
@@ -165,9 +213,7 @@ exit_omnitmux() {
         return
     elif [ "$n" = "y" ]; then
         echo  "close windows ... "
-        for pid in ${panes[*]} ; do
-            tmux kill-pane -t "${pid}"
-        done
+        close_hosts
         tput rc; tput cnorm
         exit 0
     fi
@@ -178,19 +224,6 @@ join_pane () {
     tmux resize-pane -t "{left}" -x "$menu_width"
 }
 
-connect_host () {
-    host="$1"
-    active=$(is_host_active $host)
-    id=$(get_host_id $host)
-    if [ $active -ne 1 ] ; then
-        paneid=`tmux new-window -P -F "#D" -d -n "$host" "ssh $host"`
-        ids[$id]=$id
-        hosts[$id]="$host"
-        panes[$id]="$paneid"
-        tmux select-pane -T "$host" -t $paneid
-        tmux select-pane -t $omnipane
-    fi
-}
 
 reconnect_hosts() {
     for host in ${hosts[@]} ; do
@@ -203,13 +236,13 @@ reconnect_hosts() {
 
 switch_host () {
     sel_id=$1
-    if [ $sel_id -eq $curr_id ] ; then
+    if [ $sel_id -eq $curr_hid ] ; then
         return
     fi
 
     sel_pane="${panes[$sel_id]}"
     tmux swap-pane -d -t "{right}" -s "$sel_pane"
-    curr_id=$sel_id
+    curr_hid=$sel_id
 }
 
 switch_host_end () {
@@ -226,28 +259,29 @@ switch_host_mid () {
 }
 
 pre_cluster () {
-    host_count=${#hosts[*]}
-    ((prev_id=curr_id-1+host_count))
-    ((prev_id%=host_count))
-    switch_host $prev_id
+    cluster_count=${#clusters[*]}
+    ((prev_cid=curr_cid-1+cluster_count))
+    ((prev_cid%=cluster_count))
+    ((curr_cid=prev_cid))
 }
 
 next_cluster () {
-    host_count=${#hosts[*]}
-    ((next_id=curr_cid+1))
-    ((next_id%=host_count))
+    cluster_count=${#clusters[*]}
+    ((next_cid=curr_cid+1))
+    ((next_cid%=cluster_count))
+    ((curr_cid=next_cid))
 }
 
 pre_host () {
     host_count=${#hosts[*]}
-    ((prev_id=curr_id-1+host_count))
+    ((prev_id=curr_hid-1+host_count))
     ((prev_id%=host_count))
     switch_host $prev_id
 }
 
 next_host () {
     host_count=${#hosts[*]}
-    ((next_id=curr_id+1))
+    ((next_id=curr_hid+1))
     ((next_id%=host_count))
     switch_host $next_id
 }
@@ -256,7 +290,7 @@ del_host () {
     echo -e "\nremove this host? (y/n) "
     n=`get_keystroke`
     if [ "$n" = "y" ]; then
-        del_id=$curr_id
+        del_id=$curr_hid
         del_pane=${panes[$del_id]}
         delhost=${hosts[$del_id]}
         next_host
@@ -264,7 +298,7 @@ del_host () {
         ids=( ${ids[@]/${#ids[@]}} )
         hosts=( ${hosts[@]/"$delhost"} )
         panes=( ${panes[@]/"$del_pane"} )
-        curr_id=$del_id
+        curr_hid=$del_id
     fi
 }
 
@@ -283,11 +317,11 @@ add_host () {
 }
 
 multicast () {
-    curr_pane=${panes[$curr_id]}
+    curr_pane=${panes[$curr_hid]}
     tmux send-keys -t $curr_pane "$@"
     if [ $do_multicast = 1 ]; then
         for id in ${tagged_ids[*]} ; do
-            if [ $id -ne $curr_id ] ; then
+            if [ $id -ne $curr_hid ] ; then
                 paneid=${panes[$id]}
                 tmux send-keys -t $paneid "$@"
             fi
@@ -296,7 +330,7 @@ multicast () {
 }
 
 split_pane () {
-    host=${hosts[$curr_id]}
+    host=${hosts[$curr_hid]}
     tmux split-window -v -t "{right}" "ssh $host"
 }
 
@@ -315,7 +349,7 @@ toggle_tag_host () {
 
     declare -a new_tagged_ids
     for id in ${tagged_ids[@]} ; do
-        if [ "$id" == "$curr_id" ]; then
+        if [ "$id" == "$curr_hid" ]; then
             found=1
         else
             new_tagged_ids=( ${new_tagged_ids[*]}  $id )
@@ -325,7 +359,7 @@ toggle_tag_host () {
     if [ $found = 1 ]; then
         tagged_ids=( ${new_tagged_ids[*]} )
     else
-        tagged_ids=( ${new_tagged_ids[*]} "$curr_id")
+        tagged_ids=( ${new_tagged_ids[*]} "$curr_hid")
     fi
 }
 
@@ -339,13 +373,32 @@ toggle_multicast () {
 }
 
 
+switch_to_stage_hosts() {
+    cluster_file=${clusters[$curr_cid]}
+    cluster_file_path="$CLUSTER_PATH/$cluster_file"
+    load_hosts $cluster_file_path
+    curr_hid=0
+    connect_hosts
+    stage="hosts"
+
+    tmux select-pane -t $left_pane
+    join_pane ${panes[$curr_hid]}
+}
+
+switch_to_stage_clusters() {
+    stage="cluster"
+    close_hosts
+    load_clusters
+    curr_cid=0
+}
+
 stage_cluster() {
     m=$(get_keystroke)
     hid=0
     case "$m" in
-        "j"|"J") ((curr_cid+=1)) ;;
-        "k"|"K") ((curr_cid-=1)) ;;
-        ) stage="hosts" ;;
+        "j"|"J") next_cluster ;;
+        "k"|"K") pre_cluster ;;
+        ) switch_to_stage_hosts ;;
         "x"|"X") exit_omnitmux ;;
         "?") toggle_menu ;;
         *) continue ;;
@@ -366,7 +419,7 @@ stage_host() {
                 "n"|"N") split_pane ;;
                 "a"|"A") add_host ;;
                 "d"|"D") del_host ;;
-                "r") connect_host ${hosts[$curr_id]} ;;
+                "r") connect_host ${hosts[$curr_hid]} ;;
                 "R") reconnect_hosts ;;
                 "t") toggle_tag_host ;;
                 "T") toggle_tag_all_hosts ;;
@@ -375,6 +428,7 @@ stage_host() {
                 "m") switch_host_mid ;;
                 "x"|"X") exit_omnitmux ;;
                 "c") toggle_multicast ;;
+                "q") switch_to_stage_clusters ;;
                 "?") toggle_menu ;;
                 *) continue ;;
             esac
@@ -388,8 +442,6 @@ stage_host() {
 }
 
 run() {
-    tmux select-pane -t $TMUX_PANE
-    join_pane ${panes[$curr_id]}
     func_menu
 
     while [ 1 ]; do
@@ -401,20 +453,27 @@ run() {
     done
 }
 
-if [ ! -f `which tmux` ]; then
-    echo "$0: tmux not found"
-    exit 1
-fi
 
-host_file=$1
-if [ ! -z $host_file ] && [ -f $host_file ]; then
-    stage="hosts"
-    for host in `cat $host_file | grep -v "^#" | grep -v "^$"`; do
-        connect_host "$host"
-    done
-#else
-#    add_host force
-fi
+main() {
+    if [ ! -f `which tmux` ]; then
+        echo "$0: tmux not found"
+        exit 1
+    fi
 
-run
+    load_clusters
 
+    host_file=$1
+    if [ ! -z $host_file ] && [ -f $host_file ]; then
+        stage="hosts"
+        for host in `cat $host_file | grep -v "^#" | grep -v "^$"`; do
+            connect_host "$host"
+        done
+    #else
+    #    add_host force
+    fi
+
+    run
+}
+
+
+main "$*"
