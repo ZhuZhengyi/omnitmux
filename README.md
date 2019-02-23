@@ -23,6 +23,8 @@ A cluster operate tool base tmux as omnitty, inspired by tmuxbro.
 
 * j/J/UP: next cluster
 * k/K/DOWN: prev cluster
+* m: jump to middle cluster
+* e: jump to end cluster
 * `<ENTER>`: enter into stage host of current cluster
 * x: exit
 
@@ -60,10 +62,21 @@ $ tmux
 then run with:
 
 ```shell
-$ tmux
 $ ./omnitmux.sh  ./nodes		# start by load file nodes which contain cluster hosts
 $ ./omnitmux.sh  				# start with clusters under default config path 
 ```
 
+cluster hosts file must likes:
 
+```shell
+$ cat ./nodes
+user1@172.20.240.95
+10.194.133.103
+10.194.133.194
+10.194.134.103
+10.194.134.167
+10.194.135.8
+```
+
+all hosts should ssh config to be login in
 
