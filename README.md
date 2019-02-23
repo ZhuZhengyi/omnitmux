@@ -34,7 +34,9 @@ A cluster operate tool base tmux as omnitty, inspired by tmuxbro.
 * T: tag all hosts
 * c: enable multicast mode
 * <ESC>: disable multicast mode
-* 
+* <ENTER>: enter current host
+* m: jump to middle host
+* e: jump to end host
 * r: reconnect current host
 * R: reconnect all hosts
 * a: add hosts
