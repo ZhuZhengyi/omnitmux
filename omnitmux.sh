@@ -1,19 +1,25 @@
-#!/bin/bash
+#!/usr/bin/env bash
+#
+# omnitmux.sh
+# Copyright (C) 2019 Justice <justice_103@126.com>
+#
+# Distributed under terms of the MIT license.
 
+app_name="omnitmux"
+app_version="1.0"
 debug=0
 show_menu=0
 do_multicast=0
 menu_width=32
 left_pane=$TMUX_PANE
-ids=()
-hosts=()
-panes=()
-tagged_ids=()
-clusters=()
-cluster_id=0
-curr_hid=0
-curr_cid=0
-stage="cluster"      #0,cluster; 1,hosts
+clusters=()         #clusters
+hosts=()            #hosts
+panes=()            #host panes
+ids=()              #host ids
+tagged_ids=()       #tagged host ids
+curr_hid=0          #current host_id
+curr_cid=0          #current cluster_id
+stage="cluster"     #cluster; host
 
 RED="\033[1;31m"
 GREEN="\033[1;32m"
@@ -21,11 +27,15 @@ BLINK="\033[1;38m"
 NC="\033[0m" # No Color
 ESC="27"
 
-CLUSTER_CONF="$HOME/.config/omnitmux/cluster.ini"
 CLUSTER_PATH="$HOME/.config/omnitmux/clusters"
 
-tmux set-option allow-rename off
-tmux set-option automatic-rename off
+hide_cursor() {
+    tput sc;tput civis
+}
+
+show_cursor() {
+    tput rc; tput cnorm
+}
 
 print_text () {
     echo -e "$1$NC"
@@ -53,6 +63,9 @@ is_host_active() {
     echo "$active"
 }
 
+# get host id from hosts use $host
+# if $host in hosts, return host array id
+# else return hosts size
 get_host_id() {
     host="$1"
     id=0
@@ -66,7 +79,7 @@ get_host_id() {
     echo "$id"
 }
 
-load_hosts() {
+load_cluster_hosts() {
     host_file=$1
     if [ ! -z $host_file ] && [ -f $host_file ]; then
         id=0
@@ -74,10 +87,12 @@ load_hosts() {
             hosts[$id]=$host
             ((id+=1))
         done
+    else
+        add_hosts
     fi
 }
 
-connect_host () {
+connect_host() {
     host="$1"
     active=$(is_host_active $host)
     id=$(get_host_id $host)
@@ -91,7 +106,6 @@ connect_host () {
 }
 
 connect_hosts() {
-    id=0
     for host in ${hosts[*]} ; do
         connect_host $host
     done
@@ -101,17 +115,22 @@ close_hosts() {
     for pid in ${panes[*]} ; do
         tmux kill-pane -t "${pid}"
     done
+    panes=()
+    hosts=()
+    ids=()
 }
 
 load_clusters() {
     id=0
-    for c in `ls -1 $CLUSTER_PATH` ; do
-        clusters[$id]=$c
-        ((id+=1))
-    done
+    if [ -d $CLUSTER_PATH ] ; then
+        for c in `ls -1 $CLUSTER_PATH` ; do
+            clusters[$id]=$c
+            ((id+=1))
+        done
+    fi
 }
 
-show_stage_clusters() {
+print_cluster_list() {
     id=0
     cid=0
     for cluster in `echo ${clusters[*]}`; do
@@ -125,7 +144,7 @@ show_stage_clusters() {
     done
 }
 
-show_stage_hosts() {
+print_host_list() {
     host_id=0
     hid=1
     for host in ${hosts[@]}; do
@@ -168,7 +187,7 @@ show_stage_hosts() {
     fi
 }
 
-func_menu() {
+print_menu() {
     active_hosts=`tmux list-panes -s -F "#T"`
     [ $debug -eq 0 ] && clear
     if [ $show_menu = 1 ]; then
@@ -181,6 +200,8 @@ func_menu() {
         echo -e "$GREEN[a]$NC: add new host"
         echo -e "$GREEN[d]$NC: delete current host"
         echo -e "$GREEN[r]$NC: reconnect current host"
+        echo -e "$GREEN[q]$NC: quit host stage"
+        echo -e "$GREEN[ENTER]$NC: enter host stage"
         echo -e "$GREEN[ESC]$NC: toggle multicast mode"
         echo -e "$GREEN[x]$NC: exit program"
         echo -e "$GREEN[?]$NC: toggle help info"
@@ -191,10 +212,11 @@ func_menu() {
     fi
 
     case $stage in
-        "cluster") show_stage_clusters ;;
-        *) show_stage_hosts ;;
+        "cluster") print_cluster_list ;;
+        *) print_host_list ;;
     esac
-    tput sc;tput civis
+
+    hide_cursor
 }
 
 get_keystroke () {
@@ -204,17 +226,15 @@ get_keystroke () {
     stty $old_stty_settings
 }
 
-
 exit_omnitmux() {
-    echo -e "\nclose all remote connections?"
+    echo -ne "Exit $app_name? "
     echo "([y]es/[n]o/[c]ancel) "
     n=`get_keystroke`
     if [ "$n" != "n" ] && [ "$n" != "y" ]; then
         return
     elif [ "$n" = "y" ]; then
-        echo  "close windows ... "
         close_hosts
-        tput rc; tput cnorm
+        show_cursor
         exit 0
     fi
 }
@@ -223,7 +243,6 @@ join_pane () {
     tmux join-pane -s $1 -h -d
     tmux resize-pane -t "{left}" -x "$menu_width"
 }
-
 
 reconnect_hosts() {
     for host in ${hosts[@]} ; do
@@ -299,24 +318,29 @@ del_host () {
         hosts=( ${hosts[@]/"$delhost"} )
         panes=( ${panes[@]/"$del_pane"} )
         curr_hid=$del_id
+        hosts_size=${#hosts[*]}
+        ((curr_hid%=hosts_size))
     fi
 }
 
-add_host () {
+add_hosts() {
     echo -e "\nadd host: "
     host_id=${#hosts[*]}
+    id=0
     while [ 1 ]; do
-        ((host_id+=1))
-        read -p "[$host_id] " host
+        ((id=host_id+1))
+        read -p "[$id] " host
         if [ "$host" != "" ]; then
+            hosts[$host_id]=$host
             connect_host "$host"
         elif [ "-$host" == "-" ]; then
             break
         fi
+        ((host_id+=1))
     done
 }
 
-multicast () {
+multicast() {
     curr_pane=${panes[$curr_hid]}
     tmux send-keys -t $curr_pane "$@"
     if [ $do_multicast = 1 ]; then
@@ -372,27 +396,40 @@ toggle_multicast () {
     fi
 }
 
-
-switch_to_stage_hosts() {
-    cluster_file=${clusters[$curr_cid]}
-    cluster_file_path="$CLUSTER_PATH/$cluster_file"
-    load_hosts $cluster_file_path
-    curr_hid=0
-    connect_hosts
+load_stage_hosts() {
     stage="hosts"
+    cluster_path=$1
+    curr_hid=0
+    if [ -f $cluster_path ] ; then
+        load_cluster_hosts $cluster_path
+        connect_hosts
+    else
+        add_hosts
+    fi
 
     tmux select-pane -t $left_pane
     join_pane ${panes[$curr_hid]}
+}
+
+switch_to_stage_hosts() {
+    stage="hosts"
+    cluster_file=${clusters[$curr_cid]}
+    cluster_file_path="$CLUSTER_PATH/$cluster_file"
+    load_stage_hosts $cluster_file_path
 }
 
 switch_to_stage_clusters() {
     stage="cluster"
     close_hosts
     load_clusters
-    curr_cid=0
+
+    cluster_count=${#clusters[*]}
+    if [ $cluster_count -eq 0 ] ; then
+        add_hosts
+    fi
 }
 
-stage_cluster() {
+key_with_stage_cluster() {
     m=$(get_keystroke)
     hid=0
     case "$m" in
@@ -405,7 +442,7 @@ stage_cluster() {
     esac
 }
 
-stage_host() {
+key_with_stage_host() {
     m=$(get_keystroke)
     hid=0
     if [ $do_multicast -eq 0 ] ; then
@@ -417,7 +454,7 @@ stage_host() {
                 "j"|"J") next_host ;;
                 "k"|"K") pre_host ;;
                 "n"|"N") split_pane ;;
-                "a"|"A") add_host ;;
+                "a"|"A") add_hosts ;;
                 "d"|"D") del_host ;;
                 "r") connect_host ${hosts[$curr_hid]} ;;
                 "R") reconnect_hosts ;;
@@ -442,17 +479,14 @@ stage_host() {
 }
 
 run() {
-    func_menu
-
     while [ 1 ]; do
+        print_menu
         case $stage in
-            "cluster") stage_cluster ;;
-            *) stage_host ;;
+            "cluster") key_with_stage_cluster ;;
+            *) key_with_stage_host ;;
         esac
-        func_menu
     done
 }
-
 
 main() {
     if [ ! -f `which tmux` ]; then
@@ -460,20 +494,21 @@ main() {
         exit 1
     fi
 
+    tmux set-option allow-rename off
+    tmux set-option automatic-rename off
+
+    clear
     load_clusters
 
     host_file=$1
     if [ ! -z $host_file ] && [ -f $host_file ]; then
-        stage="hosts"
-        for host in `cat $host_file | grep -v "^#" | grep -v "^$"`; do
-            connect_host "$host"
-        done
-    #else
-    #    add_host force
+        load_stage_hosts $host_file
+    elif [ ${#clusters[*]} -eq 0 ] ; then
+        stage="host"
+        add_hosts
     fi
 
     run
 }
-
 
 main "$*"
