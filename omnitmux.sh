@@ -8,10 +8,11 @@
 app_name="omnitmux"
 app_version="1.0"
 debug=0
-show_menu=0
+show_help=0
 do_multicast=0
 menu_width=32
 left_pane=$TMUX_PANE
+window_size=()
 clusters=()         #clusters
 hosts=()            #hosts
 panes=()            #host panes
@@ -42,7 +43,7 @@ print_text () {
 }
 
 toggle_menu () {
-    show_menu=$(($(($show_menu+1))%2))
+    show_help=$(($(($show_help+1))%2))
 }
 
 toggle_mode() {
@@ -130,16 +131,41 @@ load_clusters() {
     fi
 }
 
+window_height=80
+get_window_size() {
+    window_size=( `stty size` )
+    window_height=${window_size[0]}
+    window_weight=${window_size[1]}
+    if [ $show_help -eq 0 ] ; then
+        ((window_height-=4))
+    else
+        ((window_height-=14))
+    fi
+}
+
 print_cluster_list() {
     id=0
     cid=0
+
+    get_window_size
+    hid0=0
+    hid1=$window_height
+    if [ $curr_cid -gt $hid1 ] ; then
+        ((hid1=curr_cid+1))
+        ((hid0=curr_cid-window_height+1))
+    fi
+
     for cluster in `echo ${clusters[*]}`; do
         ((cid=id+1))
         line_text="[$cid] $cluster"
         if [ $id -eq $curr_cid ] ; then
             line_text="$GREEN$line_text"
         fi
-        print_text "$line_text"
+        if [ $cid -gt $hid1 ] ; then
+            break
+        elif [ $cid -gt $hid0 ] ; then
+            print_text "$line_text"
+        fi
         ((id+=1))
     done
 }
@@ -147,6 +173,15 @@ print_cluster_list() {
 print_host_list() {
     host_id=0
     hid=1
+
+    get_window_size
+    hid0=0
+    hid1=$window_height
+    if [ $curr_hid -gt $hid1 ] ; then
+        ((hid1=curr_hid+1))
+        ((hid0=curr_hid-window_height+1))
+    fi
+
     for host in ${hosts[@]}; do
         active=0
         tagged=0
@@ -178,7 +213,11 @@ print_host_list() {
         elif [ $do_multicast = 1 ]; then
             line_text="$RED$line_text"
         fi
-        print_text "$line_text"
+        if [ $hid -gt $hid1 ] ; then
+            break
+        elif [ $hid -gt $hid0 ] ; then
+            print_text "$line_text"
+        fi
         ((host_id+=1))
     done
 
@@ -190,7 +229,7 @@ print_host_list() {
 print_menu() {
     active_hosts=`tmux list-panes -s -F "#T"`
     [ $debug -eq 0 ] && clear
-    if [ $show_menu = 1 ]; then
+    if [ $show_help = 1 ]; then
         echo "======[ omni-tmux v0.1 ]======"
         echo -e "$GREEN[j]$NC: go next host"
         echo -e "$GREEN[k]$NC: go previous host"
@@ -215,7 +254,6 @@ print_menu() {
         "cluster") print_cluster_list ;;
         *) print_host_list ;;
     esac
-
     hide_cursor
 }
 
@@ -497,7 +535,6 @@ main() {
     tmux set-option allow-rename off
     tmux set-option automatic-rename off
 
-    clear
     load_clusters
 
     host_file=$1
