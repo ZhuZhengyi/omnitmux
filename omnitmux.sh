@@ -20,13 +20,20 @@ ids=()              #host ids
 tagged_ids=()       #tagged host ids
 curr_hid=0          #current host_id
 curr_cid=0          #current cluster_id
-stage="cluster"     #cluster; host
+STAGE_CLUSTER="cluster"
+STAGE_HOST="host"
+stage="$STAGE_CLUSTER"     #cluster; host
 
 RED="\033[1;31m"
 GREEN="\033[1;32m"
 BLINK="\033[1;38m"
 NC="\033[0m" # No Color
 ESC="27"
+
+KEY_UP=
+KEY_DOWN=
+KEY_ESC=
+KEY_ENTER=
 
 CLUSTER_PATH="$HOME/.config/omnitmux/clusters"
 
@@ -139,7 +146,7 @@ get_window_size() {
     if [ $show_help -eq 0 ] ; then
         ((window_height-=4))
     else
-        ((window_height-=14))
+        ((window_height-=16))
     fi
 }
 
@@ -230,7 +237,7 @@ print_menu() {
     active_hosts=`tmux list-panes -s -F "#T"`
     [ $debug -eq 0 ] && clear
     if [ $show_help = 1 ]; then
-        echo "======[ omni-tmux v0.1 ]======"
+        echo "======[ $app_name v$app_version ]======"
         echo -e "$GREEN[j]$NC: go next host"
         echo -e "$GREEN[k]$NC: go previous host"
         echo -e "$GREEN[n]$NC: split right pane"
@@ -240,18 +247,21 @@ print_menu() {
         echo -e "$GREEN[d]$NC: delete current host"
         echo -e "$GREEN[r]$NC: reconnect current host"
         echo -e "$GREEN[q]$NC: quit host stage"
-        echo -e "$GREEN[ENTER]$NC: enter host stage"
-        echo -e "$GREEN[ESC]$NC: toggle multicast mode"
         echo -e "$GREEN[x]$NC: exit program"
         echo -e "$GREEN[?]$NC: toggle help info"
-        echo "============================"
+        echo -e "$GREEN[ESC]$NC: toggle multicast mode"
+        echo -e "$GREEN[ENTER]$NC: enter host stage"
     else
         echo -e "$GREEN[?]$NC: toggle help info"
-        echo "============================"
+    fi
+    if [ $stage == $STAGE_CLUSTER ] ; then
+        echo "================================"
+    else
+        echo "--------------------------------"
     fi
 
     case $stage in
-        "cluster") print_cluster_list ;;
+        $STAGE_CLUSTER) print_cluster_list ;;
         *) print_host_list ;;
     esac
     hide_cursor
@@ -264,17 +274,21 @@ get_keystroke () {
     stty $old_stty_settings
 }
 
+quit() {
+    close_hosts
+    show_cursor
+    echo ""
+    exit 0
+}
+
 exit_omnitmux() {
-    echo -ne "Exit $app_name? "
+    echo -ne "exit $app_name? "
     echo "([y]es/[n]o/[c]ancel) "
     n=`get_keystroke`
-    if [ "$n" != "n" ] && [ "$n" != "y" ]; then
-        return
-    elif [ "$n" = "y" ]; then
-        close_hosts
-        show_cursor
-        exit 0
-    fi
+    case $n in
+        "y"|"Y") quit ;;
+        *) ;;
+    esac
 }
 
 join_pane () {
@@ -302,44 +316,52 @@ switch_host () {
     curr_hid=$sel_id
 }
 
-switch_host_end () {
+jump_to_cluster_mid () {
+    size=${#clusters[@]}
+    ((curr_cid=(size-1)/2))
+}
+
+jump_to_cluster_end () {
+    size=${#clusters[@]}
+    ((curr_cid=size-1))
+}
+
+jump_to_host_end () {
     id=${#hosts[@]}
     ((id-=1))
     switch_host $id
 }
 
-switch_host_mid () {
-    id=${#hosts[@]}
-    ((id-=1))
-    ((id/=2))
+jump_to_host_mid_low () {
+    (( id=(curr_hid+1)/2 ))
+    switch_host $id
+}
+
+jump_to_host_mid_high () {
+    size=${#hosts[@]}
+    (( id=(curr_hid+size)/2 ))
     switch_host $id
 }
 
 pre_cluster () {
-    cluster_count=${#clusters[*]}
-    ((prev_cid=curr_cid-1+cluster_count))
-    ((prev_cid%=cluster_count))
-    ((curr_cid=prev_cid))
+    size=${#clusters[*]}
+    ((curr_cid=(curr_cid-1+size)%size))
 }
 
 next_cluster () {
-    cluster_count=${#clusters[*]}
-    ((next_cid=curr_cid+1))
-    ((next_cid%=cluster_count))
-    ((curr_cid=next_cid))
+    size=${#clusters[*]}
+    ((curr_cid=(curr_cid+1)%size))
 }
 
 pre_host () {
-    host_count=${#hosts[*]}
-    ((prev_id=curr_hid-1+host_count))
-    ((prev_id%=host_count))
+    size=${#hosts[*]}
+    ((prev_id=(curr_hid-1+size)%size))
     switch_host $prev_id
 }
 
 next_host () {
-    host_count=${#hosts[*]}
-    ((next_id=curr_hid+1))
-    ((next_id%=host_count))
+    size=${#hosts[*]}
+    ((next_id=(curr_hid+1)%size))
     switch_host $next_id
 }
 
@@ -435,7 +457,7 @@ toggle_multicast () {
 }
 
 load_stage_hosts() {
-    stage="hosts"
+    stage=$STAGE_HOST
     cluster_path=$1
     curr_hid=0
     if [ -f $cluster_path ] ; then
@@ -450,14 +472,14 @@ load_stage_hosts() {
 }
 
 switch_to_stage_hosts() {
-    stage="hosts"
+    stage=$STAGE_HOST
     cluster_file=${clusters[$curr_cid]}
     cluster_file_path="$CLUSTER_PATH/$cluster_file"
     load_stage_hosts $cluster_file_path
 }
 
 switch_to_stage_clusters() {
-    stage="cluster"
+    stage=$STAGE_CLUSTER
     close_hosts
     load_clusters
 
@@ -470,14 +492,20 @@ switch_to_stage_clusters() {
 key_with_stage_cluster() {
     m=$(get_keystroke)
     hid=0
-    case "$m" in
-        "j"|"J") next_cluster ;;
-        "k"|"K") pre_cluster ;;
-        ) switch_to_stage_hosts ;;
-        "x"|"X") exit_omnitmux ;;
-        "?") toggle_menu ;;
-        *) continue ;;
-    esac
+    if `echo "$m" | grep -q -e "\d" ` && [ "$m" -ge 1  ] && [ "$m" -le ${#clusters[*]} ] ; then
+        ((curr_cid=m-1))
+    else
+        case "$m" in
+            "j"|"J") next_cluster ;;
+            "k"|"K") pre_cluster ;;
+            "e"|"E") jump_to_cluster_end ;;
+            "m"|"M") jump_to_cluster_mid ;;
+            "x"|"X") exit_omnitmux ;;
+            "?") toggle_menu ;;
+            $KEY_ENTER) switch_to_stage_hosts ;;
+            *) continue ;;
+        esac
+    fi
 }
 
 key_with_stage_host() {
@@ -498,19 +526,20 @@ key_with_stage_host() {
                 "R") reconnect_hosts ;;
                 "t") toggle_tag_host ;;
                 "T") toggle_tag_all_hosts ;;
-                "e") switch_host_end ;;
-                "'") tmux select-pane -t "{right}" ;;
-                "m") switch_host_mid ;;
-                "x"|"X") exit_omnitmux ;;
                 "c") toggle_multicast ;;
+                "e") jump_to_host_end ;;
+                "m") jump_to_host_mid_high ;;
+                "M") jump_to_host_mid_low ;;
                 "q") switch_to_stage_clusters ;;
                 "?") toggle_menu ;;
+                "x"|"X") exit_omnitmux ;;
+                $KEY_ENTER) tmux select-pane -t "{right}" ;;
                 *) continue ;;
             esac
         fi
     else
         case "$m" in
-            ) toggle_multicast ;;    #ESC
+            $KEY_ESC) toggle_multicast ;;    #ESC
             *) multicast "$m"; continue ;;
         esac
     fi
@@ -520,7 +549,7 @@ run() {
     while [ 1 ]; do
         print_menu
         case $stage in
-            "cluster") key_with_stage_cluster ;;
+            $STAGE_CLUSTER) key_with_stage_cluster ;;
             *) key_with_stage_host ;;
         esac
     done
