@@ -23,7 +23,7 @@ A cluster operate tool base tmux as omnitty, inspired by tmuxbro.
 
 * j/J/UP: next cluster
 * k/K/DOWN: prev cluster
-* <ENTER>: enter into stage host of current cluster
+* `<ENTER>`: enter into stage host of current cluster
 * x: exit
 
 ### host stage
@@ -33,8 +33,8 @@ A cluster operate tool base tmux as omnitty, inspired by tmuxbro.
 * t: tag current host
 * T: tag all hosts
 * c: enable multicast mode
-* <ESC>: disable multicast mode
-* <ENTER>: enter current host
+* `<ESC>`: disable multicast mode
+* `<ENTER>`: enter current host
 * m: jump to middle host
 * e: jump to end host
 * r: reconnect current host
@@ -51,7 +51,13 @@ clusters config path:`~/.config/omnitmux/cluster/`
 
 ## Run
 
-must start tmux first, then run with:
+must start tmux first:
+
+```shell
+$ tmux
+```
+
+then run with:
 
 ```shell
 $ tmux
