@@ -11,11 +11,11 @@ A cluster operate tool base tmux as omnitty, inspired by tmuxbro.
 
 ## Demo
 
-![cluster_stage](/Volumes/data/code/github.com/omnitmux/assets/image-20190223221909576.png)
+![cluster_stage](assets/image-20190223221909576.png)
 
 
 
-![host_stage](/Volumes/data/code/github.com/omnitmux/assets/image-20190223222257902.png)
+![host_stage](assets/image-20190223222257902.png)
 
 ## KeyMap
 
