@@ -30,8 +30,8 @@ BLINK="\033[1;38m"
 NC="\033[0m" # No Color
 ESC="27"
 
-KEY_UP=
-KEY_DOWN=
+KEY_UP=$'\e[A'
+KEY_DOWN=$'\e[B'
 KEY_ESC=
 KEY_ENTER=
 
@@ -51,10 +51,6 @@ print_text () {
 
 toggle_menu () {
     show_help=$(($(($show_help+1))%2))
-}
-
-toggle_mode() {
-    mode=$(($(($mode+1))%2))
 }
 
 is_host_active() {
@@ -138,15 +134,14 @@ load_clusters() {
     fi
 }
 
-window_height=80
+window_heigh=80
 get_window_size() {
     window_size=( `stty size` )
-    window_height=${window_size[0]}
-    window_weight=${window_size[1]}
+    window_heigh=${window_size[0]}
     if [ $show_help -eq 0 ] ; then
-        ((window_height-=4))
+        ((window_heigh-=4))
     else
-        ((window_height-=16))
+        ((window_heigh-=16))
     fi
 }
 
@@ -156,10 +151,10 @@ print_cluster_list() {
 
     get_window_size
     hid0=0
-    hid1=$window_height
+    hid1=$window_heigh
     if [ $curr_cid -gt $hid1 ] ; then
         ((hid1=curr_cid+1))
-        ((hid0=curr_cid-window_height+1))
+        ((hid0=curr_cid-window_heigh+1))
     fi
 
     for cluster in `echo ${clusters[*]}`; do
@@ -183,10 +178,10 @@ print_host_list() {
 
     get_window_size
     hid0=0
-    hid1=$window_height
+    hid1=$window_heigh
     if [ $curr_hid -gt $hid1 ] ; then
         ((hid1=curr_hid+1))
-        ((hid0=curr_hid-window_height+1))
+        ((hid0=curr_hid-window_heigh+1))
     fi
 
     for host in ${hosts[@]}; do
@@ -496,8 +491,8 @@ key_with_stage_cluster() {
         ((curr_cid=m-1))
     else
         case "$m" in
-            "j"|"J") next_cluster ;;
-            "k"|"K") pre_cluster ;;
+            "j"|$KEY_DOWN) next_cluster ;;
+            "k"|$KEY_UP) pre_cluster ;;
             "e"|"E") jump_to_cluster_end ;;
             "m"|"M") jump_to_cluster_mid ;;
             "x"|"X") exit_omnitmux ;;
@@ -517,8 +512,8 @@ key_with_stage_host() {
             switch_host "$hid"
         else
             case "$m" in
-                "j"|"J") next_host ;;
-                "k"|"K") pre_host ;;
+                "j"|$KEY_DOWN) next_host ;;
+                "k"|$KEY_UP) pre_host ;;
                 "n"|"N") split_pane ;;
                 "a"|"A") add_hosts ;;
                 "d"|"D") del_host ;;
