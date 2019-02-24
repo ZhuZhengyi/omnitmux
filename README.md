@@ -49,7 +49,22 @@ A cluster operate tool base tmux as omnitty, inspired by tmuxbro.
 
 ## Config path
 
-clusters config path:`~/.config/omnitmux/cluster/`
+clusters config path:`~/.config/omnitmux/clusters/`
+
+```shell
+$ ls ~/.config/omnitmux/clusters/
+hb02  test  test2 ump01
+$ cat ~/.config/omnitmux/clusters/test
+# ma
+171.21.240.67
+171.20.240.94
+171.20.240.95
+# da
+11.194.133.103
+11.194.133.194
+11.194.134.103
+11.194.134.167
+```
 
 ## Run
 
@@ -63,7 +78,7 @@ then run with:
 
 ```shell
 $ ./omnitmux.sh  ./nodes		# start by load file nodes which contain cluster hosts
-$ ./omnitmux.sh  				# start with clusters under default config path 
+$ ./omnitmux.sh  			# start with clusters under default config path 
 ```
 
 cluster hosts file must likes:
