@@ -35,6 +35,19 @@ KEY_DOWN=$'\e[B'
 KEY_ESC=
 KEY_ENTER=
 
+TMUX_VERSION=$(tmux -V | awk '{print $2}')
+TOKEN_LEFT="{left}"
+TOKEN_RIGHT="{right}"
+case "$TMUX_VERSION" in
+    1*)
+        TOKEN_LEFT="left"
+        TOKEN_RIGHT="right"
+        ;;
+    *)
+        ;;
+esac
+
+
 CLUSTER_PATH="$HOME/.config/omnitmux/clusters"
 
 hide_cursor() {
@@ -104,7 +117,7 @@ connect_host() {
         paneid=`tmux new-window -P -F "#D" -d -n "$host" "ssh $host"`
         ids[$id]=$id
         panes[$id]="$paneid"
-        tmux select-pane -T "$host" -t $paneid
+        tmux select-pane -T "${host}" -t $paneid
         tmux select-pane -t $left_pane
     fi
 }
@@ -288,7 +301,7 @@ exit_omnitmux() {
 
 join_pane () {
     tmux join-pane -s $1 -h -d
-    tmux resize-pane -t "{left}" -x "$menu_width"
+    tmux resize-pane -t "${TOKEN_LEFT}" -x "$menu_width"
 }
 
 reconnect_hosts() {
@@ -307,7 +320,7 @@ switch_host () {
     fi
 
     sel_pane="${panes[$sel_id]}"
-    tmux swap-pane -d -t "{right}" -s "$sel_pane"
+    tmux swap-pane -d -t "${TOKEN_RIGHT}" -s "$sel_pane"
     curr_hid=$sel_id
 }
 
@@ -410,7 +423,7 @@ multicast() {
 
 split_pane () {
     host=${hosts[$curr_hid]}
-    tmux split-window -v -t "{right}" "ssh $host"
+    tmux split-window -v -t "${TOKEN_RIGHT}" "ssh $host"
 }
 
 toggle_tag_all_hosts () {
@@ -528,7 +541,7 @@ key_with_stage_host() {
                 "q") switch_to_stage_clusters ;;
                 "?") toggle_menu ;;
                 "x"|"X") exit_omnitmux ;;
-                $KEY_ENTER) tmux select-pane -t "{right}" ;;
+                $KEY_ENTER) tmux select-pane -t "${TOKEN_RIGHT}" ;;
                 *) continue ;;
             esac
         fi
@@ -556,8 +569,17 @@ main() {
         exit 1
     fi
 
+    if [ "-$TMUX" == "-" ]; then
+        echo "$0: must run in tmux"
+        exit 1
+    fi
+
     tmux set-option allow-rename off
     tmux set-option automatic-rename off
+    tmux bind-key -nr C-l select-pane -R
+    tmux bind-key -nr C-h select-pane -L
+    tmux bind-key -nr C-j select-pane -D
+    tmux bind-key -nr C-k select-pane -U
 
     load_clusters
 
