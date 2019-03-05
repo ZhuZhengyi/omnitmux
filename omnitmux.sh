@@ -570,8 +570,9 @@ main() {
     fi
 
     if [ "-$TMUX" == "-" ]; then
-        echo "$0: must run in tmux"
-        exit 1
+        tmux new-session -s omnitmux-$$ "bash $0 $*"
+        #echo "$0: must run in tmux"
+        exit
     fi
 
     tmux set-option allow-rename off
