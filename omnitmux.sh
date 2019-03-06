@@ -273,6 +273,8 @@ print_menu() {
         echo -e "$GREEN[q]$NC: quit host stage"
         echo -e "$GREEN[x]$NC: exit program"
         echo -e "$GREEN[?]$NC: toggle help info"
+        echo -e "$GREEN[C-l]$NC: switch to right pane"
+        echo -e "$GREEN[C-h]$NC: switch to left pane"
         echo -e "$GREEN[ESC]$NC: toggle multicast mode"
         echo -e "$GREEN[ENTER]$NC: enter host stage"
     else
@@ -447,8 +449,12 @@ multicast() {
 }
 
 split_pane () {
-    host=${hosts[$curr_hid]}
-    tmux split-window -v -t "${TOKEN_RIGHT}" "ssh $host"
+    host=$1
+    if [ "-$host" == "-" ] ; then
+        tmux split-window -v -t "${TOKEN_RIGHT}"
+    else
+        tmux split-window -v -t "${TOKEN_RIGHT}" "ssh $host"
+    fi
 }
 
 toggle_tag_all_hosts () {
@@ -532,7 +538,7 @@ key_with_stage_cluster() {
             "k"|$KEY_UP) pre_cluster ;;
             "e"|"E") jump_to_cluster_end ;;
             "m"|"M") jump_to_cluster_mid ;;
-            "x"|"X") exit_omnitmux ;;
+            "x"|"X"|"q") exit_omnitmux ;;
             "?") toggle_menu ;;
             $KEY_ENTER) switch_to_stage_hosts ;;
             *) continue ;;
@@ -551,7 +557,8 @@ key_with_stage_host() {
             case "$m" in
                 "j"|$KEY_DOWN) next_host ;;
                 "k"|$KEY_UP) pre_host ;;
-                "n"|"N") split_pane ;;
+                "n") split_pane ;;
+                "N") split_pane ${hosts[$curr_hid]} ;;
                 "a"|"A") add_hosts ;;
                 "d"|"D") del_host ;;
                 "r") connect_host ${hosts[$curr_hid]} ;;
@@ -598,9 +605,12 @@ main() {
         #echo "$0: must run in tmux"
         exit
     fi
+    left_pane=$TMUX_PANE
 
-    tmux set-option allow-rename off
-    tmux set-option automatic-rename off
+    #tmux set-option allow-rename off
+    #tmux set-option automatic-rename off
+    
+    #tmux set -g prefix2 C-a
     tmux bind-key -nr C-l select-pane -R
     tmux bind-key -nr C-h select-pane -L
     tmux bind-key -nr C-j select-pane -D
