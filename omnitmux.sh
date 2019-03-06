@@ -66,18 +66,26 @@ toggle_menu () {
     show_help=$(($(($show_help+1))%2))
 }
 
-is_host_active() {
-    host="$1"
+
+is_pane_active() {
+    pane="$1"
     active=0
-    active_hosts=`tmux list-panes -s -F "#T"`
-    for h in `echo "$active_hosts"` ; do
-        if [ "-$h" == "-$host" ]; then
+    active_panes=(  `tmux list-panes -s -F "#D"` )
+    for p in ${active_panes[*]} ; do
+        if [ "-$p" == "-$pane" ]; then
             active=1
             break
         fi
     done
 
     echo "$active"
+}
+
+is_host_active() {
+    host="$1"
+    id=$(get_host_id $host)
+    paneid=${panes[$id]}
+    echo $(is_pane_active $paneid)
 }
 
 # get host id from hosts use $host
@@ -111,13 +119,13 @@ load_cluster_hosts() {
 
 connect_host() {
     host="$1"
-    active=$(is_host_active $host)
     id=$(get_host_id $host)
+    paneid=${panes[$id]}
+    active=$(is_pane_active $paneid)
     if [ $active -ne 1 ] ; then
         paneid=`tmux new-window -P -F "#D" -d -n "$host" "ssh $host"`
         ids[$id]=$id
         panes[$id]="$paneid"
-        tmux select-pane -T "${host}" -t $paneid
         tmux select-pane -t $left_pane
     fi
 }
@@ -197,18 +205,26 @@ print_host_list() {
         ((hid0=curr_hid-window_heigh+1))
     fi
 
+    active_panes=(  `tmux list-panes -s -F "#D"` )
     for host in ${hosts[@]}; do
         active=0
         tagged=0
         ((hid=host_id+1))
         line_text="[$hid] $host"
+        paneid=${panes[$host_id]}
 
-        for h in `echo "$active_hosts"` ; do
-            if [ "-$h" == "-$host" ]; then
+        for p in ${active_panes[*]} ; do
+            if [ "-$p" == "-$paneid" ]; then
                 active=1
                 break
             fi
         done
+        #for h in `echo "$active_hosts"` ; do
+        #    if [ "-$h" == "-$host" ]; then
+        #        active=1
+        #        break
+        #    fi
+        #done
 
         for id in ${tagged_ids[*]} ; do
             if [ "$id" == "$host_id" ] ; then
@@ -300,7 +316,9 @@ exit_omnitmux() {
 }
 
 join_pane () {
-    tmux join-pane -s $1 -h -d
+    target_pane="$1"
+    tmux select-pane -t $left_pane
+    tmux join-pane -s $target_pane -h -d
     tmux resize-pane -t "${TOKEN_LEFT}" -x "$menu_width"
 }
 
@@ -320,7 +338,14 @@ switch_host () {
     fi
 
     sel_pane="${panes[$sel_id]}"
-    tmux swap-pane -d -t "${TOKEN_RIGHT}" -s "$sel_pane"
+    pane_count=$( tmux list-panes | wc -l )
+    if (( $pane_count > 1 ))  ; then
+        tmux swap-pane -d -t "${TOKEN_RIGHT}" -s "$sel_pane"
+    else
+        join_pane $sel_pane
+
+    fi
+
     curr_hid=$sel_id
 }
 
@@ -475,7 +500,6 @@ load_stage_hosts() {
         add_hosts
     fi
 
-    tmux select-pane -t $left_pane
     join_pane ${panes[$curr_hid]}
 }
 
