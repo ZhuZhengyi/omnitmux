@@ -12,11 +12,11 @@ show_help=0
 do_multicast=0
 menu_width=32
 left_pane=$TMUX_PANE
-right_pane="{right}"
 window_size=()
 clusters=()         #clusters
 hosts=()            #hosts
 panes=()            #host panes
+split_panes=()
 ids=()              #host ids
 tagged_ids=()       #tagged host ids
 curr_hid=0          #current host_id
@@ -37,12 +37,12 @@ KEY_ESC=
 KEY_ENTER=
 
 TMUX_VERSION=$(tmux -V | awk '{print $2}')
-TOKEN_LEFT="{left}"
-TOKEN_RIGHT="{right}"
+RIGHT_PANE="{top-right}"
+SPLIT_PANE="{bottom-right}"
 case "$TMUX_VERSION" in
     1*)
-        TOKEN_LEFT="left"
-        TOKEN_RIGHT="right"
+        RIGHT_PANE="top-right"
+        SPLIT_PANE="bottom-right"
         ;;
     *)
         ;;
@@ -50,6 +50,9 @@ esac
 
 
 CLUSTER_PATH="$HOME/.config/omnitmux/clusters"
+
+
+trap "exit_app" 1 2 3 15
 
 hide_cursor() {
     tput sc;tput civis
@@ -139,11 +142,15 @@ connect_hosts() {
 
 close_hosts() {
     for pid in ${panes[*]} ; do
-        tmux kill-pane -t "${pid}"
+        tmux kill-pane -t "${pid}" 2>/dev/null
+    done
+    for pid in ${split_panes[*]} ; do
+        tmux kill-pane -t "${pid}" 2>/dev/null
     done
     panes=()
     hosts=()
     ids=()
+    split_panes=()
 }
 
 load_clusters() {
@@ -220,12 +227,6 @@ print_host_list() {
                 break
             fi
         done
-        #for h in `echo "$active_hosts"` ; do
-        #    if [ "-$h" == "-$host" ]; then
-        #        active=1
-        #        break
-        #    fi
-        #done
 
         for id in ${tagged_ids[*]} ; do
             if [ "$id" == "$host_id" ] ; then
@@ -308,7 +309,7 @@ quit() {
     exit 0
 }
 
-exit_omnitmux() {
+exit_app() {
     echo -ne "exit $app_name? "
     echo "([y]es/[n]o/[c]ancel) "
     n=`get_keystroke`
@@ -320,9 +321,9 @@ exit_omnitmux() {
 
 join_pane () {
     target_pane="$1"
-    tmux select-pane -t $left_pane
+    tmux select-pane -t ${left_pane}
     tmux join-pane -s $target_pane -h -d
-    tmux resize-pane -t "${TOKEN_LEFT}" -x "$menu_width"
+    tmux resize-pane -t "${left_pane}" -x "$menu_width"
 }
 
 reconnect_hosts() {
@@ -339,15 +340,18 @@ switch_host () {
     if [ $sel_id -eq $curr_hid ] ; then
         return
     fi
+    sel_host=${hosts[$sel_id]}
 
     sel_pane="${panes[$sel_id]}"
+    if [ "-$sel_pane" == "-" ] ; then
+        connect_host "$sel_host"
+    fi
     pane_count=$( tmux list-panes | wc -l )
     if (( $pane_count > 1 ))  ; then
-        tmux swap-pane -d -t "${right_pane}" -s "$sel_pane"
+        tmux swap-pane -d -t "${RIGHT_PANE}" -s "$sel_pane"
     else
         join_pane $sel_pane
     fi
-    right_pane=$sel_pane
 
     curr_hid=$sel_id
 }
@@ -451,10 +455,14 @@ multicast() {
 
 split_pane () {
     host=$1
+    paneid=""
     if [ "-$host" == "-" ] ; then
-        tmux split-window -v -t "${right_pane}"
+        paneid=`tmux split-window -v -t "${SPLIT_PANE}" -PF "#D"`
     else
-        tmux split-window -v -t "${right_pane}" "ssh $host"
+        paneid=`tmux split-window -v -t "${SPLIT_PANE}" "ssh $host" -PF "#D"`
+    fi
+    if [ "-$paneid" != "-" ] ; then
+        split_panes[${#split_panes[*]}]="$paneid"
     fi
 }
 
@@ -529,15 +537,25 @@ switch_to_stage_clusters() {
 }
 
 copy_ssh_key() {
-    if [ ! -f `which sshpass` ] || [ ! -f `which ssh-copy-id` ]; then
-        echo "$0: sshpass or ssh-copy-id not found"
+    host=$1
+
+    if [ ! -f `which ssh-copy-id` ]; then
+        echo "$0: ssh-copy-id not found"
         return
     fi
 
-    read -p "password: " pass
-    if [ "-$pass" != "-" ] ; then
+    if [ "-$host" != "-" ] ; then
+        ssh-copy-id $host
+    elif [ -f `which sshpass` ] ; then
+        read -p "password: " pass
+        if [ "-$pass" != "-" ] ; then
+            for h in ${hosts[*]} ; do
+                sshpass -p $pass ssh-copy-id $h
+            done
+        fi
+    else
         for h in ${hosts[*]} ; do
-            sshpass -p $pass ssh-copy-id $h
+            ssh-copy-id $h
         done
     fi
 }
@@ -553,7 +571,7 @@ key_with_stage_cluster() {
             "k"|$KEY_UP) pre_cluster ;;
             "e"|"E") jump_to_cluster_end ;;
             "m"|"M") jump_to_cluster_mid ;;
-            "x"|"X"|"q") exit_omnitmux ;;
+            "x"|"X"|"q") exit_app ;;
             "?") toggle_menu ;;
             $KEY_ENTER) switch_to_stage_hosts ;;
             *) continue ;;
@@ -581,14 +599,15 @@ key_with_stage_host() {
                 "t") toggle_tag_host ;;
                 "T") toggle_tag_all_hosts ;;
                 "c") toggle_multicast ;;
-                "p") copy_ssh_key ;;
+                "p") copy_ssh_key ${hosts[$curr_hid]} ;;
+                "P") copy_ssh_key ;;
                 "e") jump_to_host_end ;;
                 "m") jump_to_host_mid_high ;;
                 "M") jump_to_host_mid_low ;;
                 "q") switch_to_stage_clusters ;;
                 "?") toggle_menu ;;
-                "x"|"X") exit_omnitmux ;;
-                $KEY_ENTER) tmux select-pane -t "${right_pane}" ;;
+                "x"|"X") exit_app ;;
+                $KEY_ENTER) tmux select-pane -t "${RIGHT_PANE}" ;;
                 *) continue ;;
             esac
         fi
