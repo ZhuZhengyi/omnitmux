@@ -12,6 +12,7 @@ show_help=0
 do_multicast=0
 menu_width=32
 left_pane=$TMUX_PANE
+right_pane="{right}"
 window_size=()
 clusters=()         #clusters
 hosts=()            #hosts
@@ -342,11 +343,11 @@ switch_host () {
     sel_pane="${panes[$sel_id]}"
     pane_count=$( tmux list-panes | wc -l )
     if (( $pane_count > 1 ))  ; then
-        tmux swap-pane -d -t "${TOKEN_RIGHT}" -s "$sel_pane"
+        tmux swap-pane -d -t "${right_pane}" -s "$sel_pane"
     else
         join_pane $sel_pane
-
     fi
+    right_pane=$sel_pane
 
     curr_hid=$sel_id
 }
@@ -451,9 +452,9 @@ multicast() {
 split_pane () {
     host=$1
     if [ "-$host" == "-" ] ; then
-        tmux split-window -v -t "${TOKEN_RIGHT}"
+        tmux split-window -v -t "${right_pane}"
     else
-        tmux split-window -v -t "${TOKEN_RIGHT}" "ssh $host"
+        tmux split-window -v -t "${right_pane}" "ssh $host"
     fi
 }
 
@@ -527,6 +528,20 @@ switch_to_stage_clusters() {
     fi
 }
 
+copy_ssh_key() {
+    if [ ! -f `which sshpass` ] || [ ! -f `which ssh-copy-id` ]; then
+        echo "$0: sshpass or ssh-copy-id not found"
+        return
+    fi
+
+    read -p "password: " pass
+    if [ "-$pass" != "-" ] ; then
+        for h in ${hosts[*]} ; do
+            sshpass -p $pass ssh-copy-id $h
+        done
+    fi
+}
+
 key_with_stage_cluster() {
     m=$(get_keystroke)
     hid=0
@@ -566,13 +581,14 @@ key_with_stage_host() {
                 "t") toggle_tag_host ;;
                 "T") toggle_tag_all_hosts ;;
                 "c") toggle_multicast ;;
+                "p") copy_ssh_key ;;
                 "e") jump_to_host_end ;;
                 "m") jump_to_host_mid_high ;;
                 "M") jump_to_host_mid_low ;;
                 "q") switch_to_stage_clusters ;;
                 "?") toggle_menu ;;
                 "x"|"X") exit_omnitmux ;;
-                $KEY_ENTER) tmux select-pane -t "${TOKEN_RIGHT}" ;;
+                $KEY_ENTER) tmux select-pane -t "${right_pane}" ;;
                 *) continue ;;
             esac
         fi
@@ -607,9 +623,6 @@ main() {
     fi
     left_pane=$TMUX_PANE
 
-    #tmux set-option allow-rename off
-    #tmux set-option automatic-rename off
-    
     #tmux set -g prefix2 C-a
     tmux bind-key -nr C-l select-pane -R
     tmux bind-key -nr C-h select-pane -L
