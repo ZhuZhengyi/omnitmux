@@ -341,6 +341,10 @@ switch_host () {
         return
     fi
     sel_host=${hosts[$sel_id]}
+    active=$(is_host_active $sel_host)
+    if [ "-$active" != "-1" ] ; then
+        connect_host $sel_host
+    fi
 
     sel_pane="${panes[$sel_id]}"
     if [ "-$sel_pane" == "-" ] ; then
@@ -459,7 +463,7 @@ split_pane () {
     if [ "-$host" == "-" ] ; then
         paneid=`tmux split-window -v -t "${SPLIT_PANE}" -PF "#D"`
     else
-        paneid=`tmux split-window -v -t "${SPLIT_PANE}" "ssh $host" -PF "#D"`
+        paneid=`tmux split-window -v -t "${SPLIT_PANE}" -PF "#D" "ssh $host"`
     fi
     if [ "-$paneid" != "-" ] ; then
         split_panes[${#split_panes[*]}]="$paneid"
@@ -594,7 +598,6 @@ key_with_stage_host() {
                 "N") split_pane ${hosts[$curr_hid]} ;;
                 "a"|"A") add_hosts ;;
                 "d"|"D") del_host ;;
-                "r") connect_host ${hosts[$curr_hid]} ;;
                 "R") reconnect_hosts ;;
                 "t") toggle_tag_host ;;
                 "T") toggle_tag_all_hosts ;;
