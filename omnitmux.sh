@@ -307,6 +307,9 @@ get_keystroke () {
 quit() {
     close_hosts
     show_cursor
+    if [ -e "$HOME/.tmux.conf" ] ; then
+        tmux source-file $HOME/.tmux.conf
+    fi
     echo ""
     exit 0
 }
