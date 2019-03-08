@@ -112,9 +112,11 @@ load_cluster_hosts() {
     host_file=$1
     if [ ! -z $host_file ] && [ -f $host_file ]; then
         id=0
-        for host in `cat $host_file | grep -v "^#" | grep -v "^$"`; do
-            hosts[$id]=$host
-            ((id+=1))
+        for host in `cat $host_file | grep -v "^#" | grep -v "^$"` ; do
+            if [ "-$host" != "-" ] ; then
+                hosts[$id]=$host
+                ((id+=1))
+            fi
         done
     else
         add_hosts
@@ -640,16 +642,17 @@ main() {
 
     if [ "-$TMUX" == "-" ]; then
         tmux new-session -s omnitmux-$$ "bash $0 $*"
-        #echo "$0: must run in tmux"
         exit
     fi
     left_pane=$TMUX_PANE
 
-    #tmux set -g prefix2 C-a
-    tmux bind-key -nr C-l select-pane -R
-    tmux bind-key -nr C-h select-pane -L
-    tmux bind-key -nr C-j select-pane -D
-    tmux bind-key -nr C-k select-pane -U
+    if [ ! -f "~/.tmux.conf" ] ; then
+        #tmux set -g prefix2 C-a
+        tmux bind-key -nr C-l select-pane -R
+        tmux bind-key -nr C-h select-pane -L
+        tmux bind-key -nr C-j select-pane -D
+        tmux bind-key -nr C-k select-pane -U
+    fi
 
     load_clusters
 
