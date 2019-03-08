@@ -634,6 +634,16 @@ run() {
     done
 }
 
+init_tmux() {
+    if [ ! -e "$HOME/.tmux.conf" ] ; then
+        #tmux set -g prefix2 C-a
+        tmux bind-key -nr C-l select-pane -R
+        tmux bind-key -nr C-h select-pane -L
+        tmux bind-key -nr C-j select-pane -D
+        tmux bind-key -nr C-k select-pane -U
+    fi
+}
+
 main() {
     if [ ! -f `which tmux` ]; then
         echo "$0: tmux not found"
@@ -646,13 +656,7 @@ main() {
     fi
     left_pane=$TMUX_PANE
 
-    if [ ! -f "~/.tmux.conf" ] ; then
-        #tmux set -g prefix2 C-a
-        tmux bind-key -nr C-l select-pane -R
-        tmux bind-key -nr C-h select-pane -L
-        tmux bind-key -nr C-j select-pane -D
-        tmux bind-key -nr C-k select-pane -U
-    fi
+    init_tmux
 
     load_clusters
 
