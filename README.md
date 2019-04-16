@@ -1,6 +1,5 @@
-[![Build Status](https://travis-ci.org/YOUR/PROJECT.svg?branch=master)](https://travis-ci.org/ZhuZhengyi/omnitmux)
 
-# OmniTmux
+# OmniTmux [![Build Status](https://travis-ci.org/YOUR/PROJECT.svg?branch=master)](https://travis-ci.org/ZhuZhengyi/omnitmux)
 
 A cluster operate tool base tmux as omnitty, inspired by tmuxbro.
 
