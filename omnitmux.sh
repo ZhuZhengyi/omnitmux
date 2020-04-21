@@ -39,23 +39,22 @@ KEY_ENTER=
 TMUX_VERSION=$(tmux -V | awk '{print $2}')
 RIGHT_PANE="{top-right}"
 SPLIT_PANE="{bottom-right}"
-case "$TMUX_VERSION" in
-    1*)
-        RIGHT_PANE="top-right"
-        SPLIT_PANE="bottom-right"
-        ;;
-    *)
-        ;;
-esac
-
+if (( $TMUX_VERSION < 2)) ; then
+    RIGHT_PANE="top-right"
+    SPLIT_PANE="bottom-right"
+fi
 
 CLUSTER_PATH="$HOME/.config/omnitmux/clusters"
+HOST_PASS=""
 
+is_sshpass_exist(){
+    type sshpass > /dev/null
+}
 
 trap "exit_app" 1 2 3 15
 
 hide_cursor() {
-    tput sc;tput civis
+    tput sc; tput civis
 }
 
 show_cursor() {
@@ -69,7 +68,6 @@ print_text () {
 toggle_menu () {
     show_help=$(($(($show_help+1))%2))
 }
-
 
 is_pane_active() {
     pane="$1"
@@ -118,6 +116,7 @@ load_cluster_hosts() {
                 ((id+=1))
             fi
         done
+        HOST_PASS=`cat $host_file | awk '/#PASS /{print $2}'`
     else
         add_hosts
     fi
@@ -129,7 +128,12 @@ connect_host() {
     paneid=${panes[$id]}
     active=$(is_pane_active $paneid)
     if [ $active -ne 1 ] ; then
-        paneid=`tmux new-window -P -F "#D" -d -n "$host" "ssh $host"`
+        if [ is_sshpass_exist -a x"${HOST_PASS}" != "x" ] ; then
+            paneid=`tmux new-window -P -F "#D" -d -n "$host" "sshpass -p \"${HOST_PASS}\" ssh $host"`
+        else
+            paneid=`tmux new-window -P -F "#D" -d -n "$host" "ssh $host"`
+        fi
+
         ids[$id]=$id
         panes[$id]="$paneid"
         tmux select-pane -t $left_pane
@@ -165,10 +169,9 @@ load_clusters() {
     fi
 }
 
-window_heigh=80
 get_window_size() {
     window_size=( `stty size` )
-    window_heigh=${window_size[0]}
+    window_heigh=${window_size[0]:-80}
     if [ $show_help -eq 0 ] ; then
         ((window_heigh-=4))
     else
