@@ -46,6 +46,7 @@ fi
 
 CLUSTER_PATH="$HOME/.config/omnitmux/clusters"
 HOST_PASS=""
+SSH_CMD="ssh"
 
 is_sshpass_exist(){
     type sshpass > /dev/null
@@ -120,6 +121,9 @@ load_cluster_hosts() {
     else
         add_hosts
     fi
+    if [ is_sshpass_exist -a x"${HOST_PASS}" != "x" ] ; then
+        SSH_CMD="sshpass -p \"${HOST_PASS}\" ssh "
+    fi
 }
 
 connect_host() {
@@ -128,11 +132,7 @@ connect_host() {
     paneid=${panes[$id]}
     active=$(is_pane_active $paneid)
     if [ $active -ne 1 ] ; then
-        if [ is_sshpass_exist -a x"${HOST_PASS}" != "x" ] ; then
-            paneid=`tmux new-window -P -F "#D" -d -n "$host" "sshpass -p \"${HOST_PASS}\" ssh $host"`
-        else
-            paneid=`tmux new-window -P -F "#D" -d -n "$host" "ssh $host"`
-        fi
+        paneid=`tmux new-window -P -F "#D" -d -n "$host" "${SSH_CMD} $host"`
 
         ids[$id]=$id
         panes[$id]="$paneid"
@@ -471,7 +471,7 @@ split_pane () {
     if [ "-$host" == "-" ] ; then
         paneid=`tmux split-window -v -t "${SPLIT_PANE}" -PF "#D"`
     else
-        paneid=`tmux split-window -v -t "${SPLIT_PANE}" -PF "#D" "ssh $host"`
+        paneid=`tmux split-window -v -t "${SPLIT_PANE}" -PF "#D" "${SSH_CMD} $host"`
     fi
     if [ "-$paneid" != "-" ] ; then
         split_panes[${#split_panes[*]}]="$paneid"
