@@ -15,6 +15,7 @@ left_pane=$TMUX_PANE
 window_size=()
 clusters=()         #clusters
 hosts=()            #hosts
+host_labels=()
 panes=()            #host panes
 split_panes=()
 ids=()              #host ids
@@ -111,12 +112,18 @@ load_cluster_hosts() {
     host_file=$1
     if [ ! -z $host_file ] && [ -f $host_file ]; then
         id=0
-        for host in `cat $host_file | grep -v "^#" | grep -v "^$"` ; do
+        OLD_IFS=$IFS
+        IFS=$'\n'
+        for line in `cat $host_file | grep -v "^#" | grep -v "^$"` ; do
+            host=$(echo "$line" | awk '{print $1}')
+            label=$(echo "$line" | awk '{print $2}')
             if [ "-$host" != "-" ] ; then
                 hosts[$id]=$host
+                host_labels[$id]=$label
                 ((id+=1))
             fi
         done
+        IFS=$OLD_IFS
         HOST_PASS=`cat $host_file | awk '/#PASS /{print $2}'`
     else
         add_hosts
@@ -155,6 +162,7 @@ close_hosts() {
     done
     panes=()
     hosts=()
+    host_labels=()
     ids=()
     split_panes=()
 }
@@ -223,7 +231,8 @@ print_host_list() {
         active=0
         tagged=0
         ((hid=host_id+1))
-        line_text="[$hid] $host"
+        label=${host_labels[$host_id]}
+        line_text="[$hid] $host $label"
         paneid=${panes[$host_id]}
 
         for p in ${active_panes[*]} ; do
