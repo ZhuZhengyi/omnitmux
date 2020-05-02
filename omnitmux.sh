@@ -15,7 +15,10 @@ left_pane=$TMUX_PANE
 window_size=()
 clusters=()         #clusters
 hosts=()            #hosts
-host_labels=()
+#host_labels=()
+#declare -A host_labels=（）
+declare -A host_labels=（）
+declare -A host_panes=（）
 panes=()            #host panes
 split_panes=()
 ids=()              #host ids
@@ -88,7 +91,8 @@ is_pane_active() {
 is_host_active() {
     host="$1"
     id=$(get_host_id $host)
-    paneid=${panes[$id]}
+    #paneid=${panes[$id]}
+    paneid=${host_panes["$host"]}
     echo $(is_pane_active $paneid)
 }
 
@@ -119,7 +123,8 @@ load_cluster_hosts() {
             label=$(echo "$line" | awk '{print $2}')
             if [ "-$host" != "-" ] ; then
                 hosts[$id]=$host
-                host_labels[$id]=$label
+                #host_labels[$id]=$label
+                host_labels[$host]=$label
                 ((id+=1))
             fi
         done
@@ -136,13 +141,15 @@ load_cluster_hosts() {
 connect_host() {
     host="$1"
     id=$(get_host_id $host)
-    paneid=${panes[$id]}
+    #paneid=${panes[$id]}
+    paneid=${host_panes[$host]}
     active=$(is_pane_active $paneid)
     if [ $active -ne 1 ] ; then
         paneid=`tmux new-window -P -F "#D" -d -n "$host" "${SSH_CMD} $host"`
 
         ids[$id]=$id
         panes[$id]="$paneid"
+        host_panes[$host]="$paneid"
         tmux select-pane -t $left_pane
     fi
 }
@@ -154,7 +161,9 @@ connect_hosts() {
 }
 
 close_hosts() {
-    for pid in ${panes[*]} ; do
+    #for pid in ${panes[*]} ; do
+    for pid in ${host_panes[@]} ; do
+        #pid=${host_panes["$host"]}
         tmux kill-pane -t "${pid}" 2>/dev/null
     done
     for pid in ${split_panes[*]} ; do
@@ -163,6 +172,7 @@ close_hosts() {
     panes=()
     hosts=()
     host_labels=()
+    host_panes=()
     ids=()
     split_panes=()
 }
@@ -231,9 +241,10 @@ print_host_list() {
         active=0
         tagged=0
         ((hid=host_id+1))
-        label=${host_labels[$host_id]}
+        label=${host_labels[$host]}
         line_text="[$hid] $host $label"
-        paneid=${panes[$host_id]}
+        #paneid=${panes[$host_id]}
+        paneid=${host_panes[$host]}
 
         for p in ${active_panes[*]} ; do
             if [ "-$p" == "-$paneid" ]; then
@@ -363,7 +374,8 @@ switch_host () {
         connect_host $sel_host
     fi
 
-    sel_pane="${panes[$sel_id]}"
+    #sel_pane="${panes[$sel_id]}"
+    sel_pane="${host_panes[$sel_host]}"
     if [ "-$sel_pane" == "-" ] ; then
         connect_host "$sel_host"
     fi
@@ -431,13 +443,17 @@ del_host () {
     n=`get_keystroke`
     if [ "$n" = "y" ]; then
         del_id=$curr_hid
-        del_pane=${panes[$del_id]}
+        #del_pane=${panes[$del_id]}
+        #del_pane=${panes[$del_id]}
         delhost=${hosts[$del_id]}
+        del_pane=${host_panes[$delhost]}
         next_host
         tmux kill-pane -t $del_pane
         ids=( ${ids[@]/${#ids[@]}} )
         hosts=( ${hosts[@]/"$delhost"} )
-        panes=( ${panes[@]/"$del_pane"} )
+        #panes=( ${panes[@]/"$del_pane"} )
+        unset host_panes[$delhost]
+        unset host_labels[$delhost]
         curr_hid=$del_id
         hosts_size=${#hosts[*]}
         ((curr_hid%=hosts_size))
