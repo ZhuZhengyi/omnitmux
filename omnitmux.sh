@@ -7,11 +7,21 @@
 
 app_name="omnitmux"
 app_version="1.0"
-debug=0
+
+# const
+LEFT_PANE=$TMUX_PANE
+STAGE_CLUSTER="cluster"
+STAGE_HOST="host"
+
+# config
+app_log=${OMNITMUX_LOG:-"/tmp/omnitmux.log"}
+debug=${OMNITMUX_DEBUG:-"0"}
+
+# var
 show_help=0
-do_multicast=0
 menu_width=32
-left_pane=$TMUX_PANE
+
+do_multicast=0
 window_size=()
 clusters=()         #clusters
 hosts=()            #hosts
@@ -22,9 +32,8 @@ ids=()              #host ids
 tagged_ids=()       #tagged host ids
 curr_hid=0          #current host_id
 curr_cid=0          #current cluster_id
-STAGE_CLUSTER="cluster"
-STAGE_HOST="host"
 stage="$STAGE_CLUSTER"     #cluster; host
+last_paneid=0
 
 RED="\033[1;31m"
 GREEN="\033[1;32m"
@@ -37,10 +46,10 @@ KEY_DOWN=$'\e[B'
 KEY_ESC=
 KEY_ENTER=
 
-TMUX_VERSION=$(tmux -V | awk '{print $2}')
+TMUX_VERSION=$(tmux -V | awk '{print $2}' | tr -d [a-z])
 RIGHT_PANE="{top-right}"
 SPLIT_PANE="{bottom-right}"
-if (( $TMUX_VERSION < 2)) ; then
+if [[  `expr $TMUX_VERSION 2` -eq 0 ]] ; then
     RIGHT_PANE="top-right"
     SPLIT_PANE="bottom-right"
 fi
@@ -54,6 +63,10 @@ is_sshpass_exist(){
 }
 
 trap "exit_app" 1 2 3 15
+
+log() {
+    [[ $# > 0 ]] && echo "`date +%Y%m%d_%H:%M:%s` $*" >> $app_log
+}
 
 hide_cursor() {
     tput sc; tput civis
@@ -139,11 +152,20 @@ connect_host() {
     paneid=${panes[$id]}
     active=$(is_pane_active $paneid)
     if [ $active -ne 1 ] ; then
-        paneid=`tmux new-window -P -F "#D" -d -n "$host" "${SSH_CMD} $host"`
-
+        paneid=`tmux new-window -P -F "#D" -d -n "$host" "${SSH_CMD} $host" 2>>$app_log`
+        log "connect_host: ${SSH_CMD} $host with pane:[$paneid] $?"
+        if [[ "-$last_paneid" == "-0" ]] ; then
+            last_paneid=$paneid
+            log "init last_paneid: $last_paneid"
+        fi
+        lactive=$(is_pane_active $last_paneid)
+        if [ "-$lactive" != "-1" ] ; then
+            last_paneid=$paneid
+        fi
         ids[$id]=$id
         panes[$id]="$paneid"
-        tmux select-pane -t $left_pane
+        tmux select-pane -t $LEFT_PANE  2>>$app_log
+        log "select-pane: $LEFT_PANE $?"
     fi
 }
 
@@ -336,11 +358,15 @@ exit_app() {
     esac
 }
 
+# join target pane into right window
 join_pane () {
     target_pane="$1"
-    tmux select-pane -t ${left_pane}
+    # select left pane
+    tmux select-pane -t ${LEFT_PANE}
+    # join target pane
     tmux join-pane -s $target_pane -h -d
-    tmux resize-pane -t "${left_pane}" -x "$menu_width"
+    # resize left pane size
+    tmux resize-pane -t "${LEFT_PANE}" -x "$menu_width"
 }
 
 reconnect_hosts() {
@@ -352,6 +378,7 @@ reconnect_hosts() {
     done
 }
 
+# switch right top pane to host
 switch_host () {
     sel_id=$1
     if [ $sel_id -eq $curr_hid ] ; then
@@ -367,6 +394,13 @@ switch_host () {
     if [ "-$sel_pane" == "-" ] ; then
         connect_host "$sel_host"
     fi
+    lactive=$(is_pane_active $last_paneid)
+    if [ "-$lactive" != "-1" ] ; then
+        log "lastpaneid $last_paneid not active"
+        paneid=`tmux split-window -v -b -t "${RIGHT_PANE}" -PF "#D"`
+        split_panes[${#split_panes[*]}]="$paneid"
+        tmux select-pane -t $LEFT_PANE  2>>$app_log
+    fi
     pane_count=$( tmux list-panes | wc -l )
     if (( $pane_count > 1 ))  ; then
         tmux swap-pane -d -t "${RIGHT_PANE}" -s "$sel_pane"
@@ -374,6 +408,10 @@ switch_host () {
         join_pane $sel_pane
     fi
 
+
+    log "switch to sel_paneid: $sel_pane"
+
+    last_paneid=$sel_pane
     curr_hid=$sel_id
 }
 
@@ -434,7 +472,7 @@ del_host () {
         del_pane=${panes[$del_id]}
         delhost=${hosts[$del_id]}
         next_host
-        tmux kill-pane -t $del_pane
+        tmux kill-pane -t $del_pane >> $app_log
         ids=( ${ids[@]/${#ids[@]}} )
         hosts=( ${hosts[@]/"$delhost"} )
         panes=( ${panes[@]/"$del_pane"} )
@@ -571,12 +609,12 @@ copy_ssh_key() {
         read -p "password: " pass
         if [ "-$pass" != "-" ] ; then
             for h in ${hosts[*]} ; do
-                sshpass -p $pass ssh-copy-id $h
+                sshpass -p $pass ssh-copy-id $h 2 >> $app_log
             done
         fi
     else
         for h in ${hosts[*]} ; do
-            ssh-copy-id $h
+            ssh-copy-id $h 2 >> $app_log
         done
     fi
 }
@@ -595,7 +633,7 @@ key_with_stage_cluster() {
             "x"|"X"|"q") exit_app ;;
             "?") toggle_menu ;;
             $KEY_ENTER) switch_to_stage_hosts ;;
-            *) continue ;;
+            *)  ;;
         esac
     fi
 }
@@ -628,7 +666,7 @@ key_with_stage_host() {
                 "?") toggle_menu ;;
                 "x"|"X") exit_app ;;
                 $KEY_ENTER) tmux select-pane -t "${RIGHT_PANE}" ;;
-                *) continue ;;
+                *) ;;
             esac
         fi
     else
@@ -665,14 +703,14 @@ main() {
         exit 1
     fi
 
+    # start tmux
     if [ "-$TMUX" == "-" ]; then
         tmux new-session -s omnitmux-$$ "bash $0 $*"
         exit
     fi
-    left_pane=$TMUX_PANE
 
+    LEFT_PANE=$TMUX_PANE
     init_tmux
-
     load_clusters
 
     host_file=$1
@@ -686,4 +724,4 @@ main() {
     run
 }
 
-main "$*"
+main "$*" 2>>$app_log
