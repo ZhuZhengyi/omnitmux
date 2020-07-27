@@ -6,7 +6,7 @@
 # Distributed under terms of the MIT license.
 
 app_name="omnitmux"
-app_version="1.0"
+app_version="1.0.20200723"
 
 # const
 LEFT_PANE=$TMUX_PANE
@@ -65,6 +65,7 @@ is_sshpass_exist(){
 trap "exit_app" 1 2 3 15
 
 log() {
+    [[ $debug -lt 1 ]] && return
     [[ $# > 0 ]] && echo "`date +%Y%m%d_%H:%M:%s` $*" >> $app_log
 }
 
@@ -154,16 +155,12 @@ connect_host() {
     if [ $active -ne 1 ] ; then
         paneid=`tmux new-window -P -F "#D" -d -n "$host" "${SSH_CMD} $host" 2>>$app_log`
         log "connect_host: ${SSH_CMD} $host with pane:[$paneid] $?"
-        if [[ "-$last_paneid" == "-0" ]] ; then
-            last_paneid=$paneid
-            log "init last_paneid: $last_paneid"
-        fi
+        ids[$id]=$id
+        panes[$id]="$paneid"
         lactive=$(is_pane_active $last_paneid)
         if [ "-$lactive" != "-1" ] ; then
             last_paneid=$paneid
         fi
-        ids[$id]=$id
-        panes[$id]="$paneid"
         tmux select-pane -t $LEFT_PANE  2>>$app_log
         log "select-pane: $LEFT_PANE $?"
     fi
@@ -299,7 +296,7 @@ print_menu() {
     active_hosts=`tmux list-panes -s -F "#T"`
     [ $debug -eq 0 ] && clear
     if [ $show_help = 1 ]; then
-        echo "======[ $app_name v$app_version ]======"
+        echo "===[ $app_name v$app_version ]==="
         echo -e "$GREEN[j]$NC: go next host"
         echo -e "$GREEN[k]$NC: go previous host"
         echo -e "$GREEN[n]$NC: split right pane"
