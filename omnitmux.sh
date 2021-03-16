@@ -520,7 +520,11 @@ split_pane () {
     if [ "-$host" == "-" ] ; then
         paneid=`tmux split-window -v -t "${SPLIT_PANE}" -PF "#D"`
     else
-        paneid=`tmux split-window -v -t "${SPLIT_PANE}" -PF "#D" "${SSH_CMD} $host"`
+        if [ "-$SSHPASS" != "-" ] ; then
+            paneid=`tmux split-window -v -t "${SPLIT_PANE}" -e "SSHPASS=$SSHPASS" -PF "#D" "${SSH_CMD} $host"`
+        else
+            paneid=`tmux split-window -v -t "${SPLIT_PANE}" -PF "#D" "${SSH_CMD} $host"`
+        fi
     fi
     if [ "-$paneid" != "-" ] ; then
         split_panes[${#split_panes[*]}]="$paneid"
