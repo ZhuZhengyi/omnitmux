@@ -6,7 +6,7 @@
 # Distributed under terms of the MIT license.
 
 app_name="omnitmux"
-app_version="1.0.20200723"
+app_version="1.0.20210316"
 
 # const
 LEFT_PANE=$TMUX_PANE
@@ -56,7 +56,8 @@ fi
 
 CLUSTER_PATH="$HOME/.config/omnitmux/clusters"
 HOST_PASS=""
-SSH_CMD="ssh"
+SSH_OPTS="-o StrictHostKeyChecking=no"
+SSH_CMD="ssh $SSH_OPTS"
 
 is_sshpass_exist(){
     type sshpass > /dev/null
@@ -153,7 +154,11 @@ connect_host() {
     paneid=${panes[$id]}
     active=$(is_pane_active $paneid)
     if [ $active -ne 1 ] ; then
-        paneid=`tmux new-window -P -F "#D" -d -n "$host" "${SSH_CMD} $host" 2>>$app_log`
+        if [ "-$SSHPASS" != "-" ] ; then
+            paneid=`tmux new-window -e "SSHPASS=$SSHPASS" -P -F "#D" -d -n "$host" "${SSH_CMD} $host" 2>>$app_log`
+        else
+            paneid=`tmux new-window -P -F "#D" -d -n "$host" "${SSH_CMD} $host" 2>>$app_log`
+        fi
         log "connect_host: ${SSH_CMD} $host with pane:[$paneid] $?"
         ids[$id]=$id
         panes[$id]="$paneid"
