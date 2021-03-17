@@ -56,7 +56,7 @@ fi
 
 CLUSTER_PATH="$HOME/.config/omnitmux/clusters"
 HOST_PASS=""
-SSH_OPTS="-o StrictHostKeyChecking=no"
+SSH_OPTS="-o StrictHostKeyChecking=no ServerAliveInterval=30"
 SSH_CMD="ssh $SSH_OPTS"
 
 is_sshpass_exist(){
