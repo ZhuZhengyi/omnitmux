@@ -46,10 +46,10 @@ KEY_DOWN=$'\e[B'
 KEY_ESC=
 KEY_ENTER=
 
-TMUX_VERSION=$(tmux -V | awk '{print $2}' | tr -d [a-z])
+TMUX_VERSION=$(tmux -V | awk '{print $2}' | tr -d '[a-z]')
 RIGHT_PANE="{top-right}"
 SPLIT_PANE="{bottom-right}"
-if [[  `expr $TMUX_VERSION 2` -eq 0 ]] ; then
+if  [ ` echo "$TMUX_VERSION > 2" | bc -l ` -ne 0 ] ; then
     RIGHT_PANE="top-right"
     SPLIT_PANE="bottom-right"
 fi
@@ -298,7 +298,7 @@ print_host_list() {
 }
 
 print_menu() {
-    active_hosts=`tmux list-panes -s -F "#T"`
+    active_hosts=`tmux list-panes -s -F "#H"`
     [ $debug -eq 0 ] && clear
     if [ $show_help = 1 ]; then
         echo "===[ $app_name v$app_version ]==="
@@ -684,7 +684,7 @@ key_with_stage_host() {
 }
 
 run() {
-    while [ 1 ]; do
+    while [[ 1 ]]; do
         print_menu
         case $stage in
             $STAGE_CLUSTER) key_with_stage_cluster ;;
