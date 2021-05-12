@@ -155,6 +155,19 @@ load_host_passwd() {
     echo "$host_passwd"
 }
 
+get_host_passwd() {
+    host=${1:?"need host"}
+    id=0
+    for h in ${hosts[*]} ; do
+        host_passwd=${host_passwds[$id]}
+        ((id+=1))
+        if [ "-$h" == "-$host" ] ; then
+            echo "$host_passwd"
+            return
+        fi
+    done
+}
+
 #load cluster host list
 load_cluster_hosts() {
     host_file=$1
@@ -182,14 +195,11 @@ load_cluster_hosts() {
     else
         add_hosts
     fi
-    #if [ is_sshpass_exist -a x"${HOST_PASS}" != "x" ] ; then
-    #    SSH_CMD="sshpass -p \"${HOST_PASS}\" ssh "
-    #fi
 }
 
 connect_host() {
     host="$1"
-    host_passwd="$2"
+    host_passwd=$(get_host_passwd $host)
     if [ is_sshpass_exist -a -"${host_passwd}" != "-" ] ; then
         SSH_CMD="sshpass -p \"${host_passwd}\" ssh "
     fi
@@ -561,6 +571,10 @@ multicast() {
 
 split_pane () {
     host=$1
+    host_passwd=$(get_host_passwd $host)
+    if [ is_sshpass_exist -a -"${host_passwd}" != "-" ] ; then
+        SSH_CMD="sshpass -p \"${host_passwd}\" ssh "
+    fi
     paneid=""
     if [ "-$host" == "-" ] ; then
         paneid=`tmux split-window -v -t "${SPLIT_PANE}" -PF "#D"`
