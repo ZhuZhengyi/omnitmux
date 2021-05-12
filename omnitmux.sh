@@ -12,10 +12,11 @@ app_version="1.0.20210316"
 LEFT_PANE=$TMUX_PANE
 STAGE_CLUSTER="cluster"
 STAGE_HOST="host"
+PASS_PREFIX="#PASS"
 
 # config
 app_log=${OMNITMUX_LOG:-"/tmp/omnitmux.log"}
-debug=${OMNITMUX_DEBUG:-"0"}
+log_level=${OMNITMUX_LOG_LEVEL:-1}
 
 # var
 show_help=0
@@ -25,6 +26,7 @@ do_multicast=0
 window_size=()
 clusters=()         #clusters
 hosts=()            #hosts
+host_passwds=()     #host passwd
 host_labels=()
 panes=()            #host panes
 split_panes=()
@@ -65,9 +67,28 @@ is_sshpass_exist(){
 
 trap "exit_app" 1 2 3 15
 
+
+LOG_LEVEL_INFO=1
+LOG_LEVEL_WARN=2
+LOG_LEVEL_DEBUG=3
+
 log() {
-    [[ $debug -lt 1 ]] && return
-    [[ $# > 0 ]] && echo "`date +%Y%m%d_%H:%M:%s` $*" >> $app_log
+    local level=${1:-0}
+    log_prefix=${2:-"INFO"}
+    [[ $log_level -lt $level ]] && return
+    [[ $# > 0 ]] && echo "`date +%Y%m%d_%H:%M:%s` [$log_prefix] $*" >> $app_log
+}
+
+log_info() {
+    log $LOG_LEVEL_INFO "INFO" "$*"
+}
+
+log_warn() {
+    log $LOG_LEVEL_WARN "WARN" "$*"
+}
+
+log_debug() {
+    log $LOG_LEVEL_DEBUG "DEBUG" "$*"
 }
 
 hide_cursor() {
@@ -123,33 +144,55 @@ get_host_id() {
     echo "$id"
 }
 
+#load host passwd from hosts config file
+load_host_passwd() {
+    host_file=${1:?"need hosts file"}
+    host=${2:?"need host"}
+    host_passwd=`cat $host_file | sed -n "/$host/, /#PASS/ p" | awk '/#PASS/{print $2}'`
+    if [ "-$host_passwd" == "-" ] ; then
+        host_passwd=`cat $host_file | awk '/#PASS/{print $2}' | head -1`
+    fi
+    echo "$host_passwd"
+}
+
+#load cluster host list
 load_cluster_hosts() {
     host_file=$1
     if [ ! -z $host_file ] && [ -f $host_file ]; then
         id=0
         OLD_IFS=$IFS
         IFS=$'\n'
+        host=""
         for line in `cat $host_file | grep -v "^#" | grep -v "^$"` ; do
             host=$(echo "$line" | awk '{print $1}')
             label=$(echo "$line" | awk '{print $2}')
+            host_passwd=$(echo "$line" | awk '{print $3}')
+            if [ "-$host_passwd" == "-" ] ; then
+                host_passwd=$(load_host_passwd $host_file $host)
+            fi
             if [ "-$host" != "-" ] ; then
                 hosts[$id]=$host
                 host_labels[$id]=$label
+                host_passwds[$id]=$host_passwd
                 ((id+=1))
             fi
         done
         IFS=$OLD_IFS
-        HOST_PASS=`cat $host_file | awk '/#PASS /{print $2}'`
+
     else
         add_hosts
     fi
-    if [ is_sshpass_exist -a x"${HOST_PASS}" != "x" ] ; then
-        SSH_CMD="sshpass -p \"${HOST_PASS}\" ssh "
-    fi
+    #if [ is_sshpass_exist -a x"${HOST_PASS}" != "x" ] ; then
+    #    SSH_CMD="sshpass -p \"${HOST_PASS}\" ssh "
+    #fi
 }
 
 connect_host() {
     host="$1"
+    host_passwd="$2"
+    if [ is_sshpass_exist -a -"${host_passwd}" != "-" ] ; then
+        SSH_CMD="sshpass -p \"${host_passwd}\" ssh "
+    fi
     id=$(get_host_id $host)
     paneid=${panes[$id]}
     active=$(is_pane_active $paneid)
@@ -159,7 +202,7 @@ connect_host() {
         else
             paneid=`tmux new-window -P -F "#D" -d -n "$host" "${SSH_CMD} $host" 2>>$app_log`
         fi
-        log "connect_host: ${SSH_CMD} $host with pane:[$paneid] $?"
+        log_info "connect_host: $host with pane:[$paneid] $?"
         ids[$id]=$id
         panes[$id]="$paneid"
         lactive=$(is_pane_active $last_paneid)
@@ -167,13 +210,16 @@ connect_host() {
             last_paneid=$paneid
         fi
         tmux select-pane -t $LEFT_PANE  2>>$app_log
-        log "select-pane: $LEFT_PANE $?"
+        log_info "select-pane: $LEFT_PANE $?"
     fi
 }
 
 connect_hosts() {
+    id=0
     for host in ${hosts[*]} ; do
-        connect_host $host
+        host_passwd=${host_passwds[$id]}
+        connect_host "$host" "$host_passwd"
+        ((id+=1))
     done
 }
 
@@ -299,7 +345,7 @@ print_host_list() {
 
 print_menu() {
     active_hosts=`tmux list-panes -s -F "#H"`
-    [ $debug -eq 0 ] && clear
+    [ $log_level -lt 2 ] && clear
     if [ $show_help = 1 ]; then
         echo "===[ $app_name v$app_version ]==="
         echo -e "$GREEN[j]$NC: go next host"
@@ -398,7 +444,7 @@ switch_host () {
     fi
     lactive=$(is_pane_active $last_paneid)
     if [ "-$lactive" != "-1" ] ; then
-        log "lastpaneid $last_paneid not active"
+        log_debug "lastpaneid $last_paneid not active"
         paneid=`tmux split-window -v -b -t "${RIGHT_PANE}" -PF "#D"`
         split_panes[${#split_panes[*]}]="$paneid"
         tmux select-pane -t $LEFT_PANE  2>>$app_log
@@ -410,8 +456,7 @@ switch_host () {
         join_pane $sel_pane
     fi
 
-
-    log "switch to sel_paneid: $sel_pane"
+    log_debug "switch to sel_paneid: $sel_pane"
 
     last_paneid=$sel_pane
     curr_hid=$sel_id

@@ -1,4 +1,3 @@
-
 # OmniTmux [![Build Status](https://travis-ci.org/YOUR/PROJECT.svg?branch=master)](https://travis-ci.org/ZhuZhengyi/omnitmux)
 
 A cluster operate tool base tmux as omnitty, inspired by tmuxbro.
@@ -105,12 +104,16 @@ cluster hosts file must likes:
 
 ```
 $ cat ./nodes
-user1@172.20.240.95
-10.194.133.103
-10.194.133.194
+
+user1@172.20.240.95 #TAG1
+10.194.133.103      #TAG2
+10.194.133.194      #TAG3
 10.194.134.103
+#PASS pass1
+
 10.194.134.167
 10.194.135.8
+#PASS pass2
 ```
 
 all hosts should ssh config to be login in
